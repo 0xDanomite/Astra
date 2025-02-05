@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  env: {
+    CDP_API_KEY_NAME: process.env.CDP_API_KEY_NAME!,
+    CDP_API_KEY_PRIVATE_KEY: process.env.CDP_API_KEY_PRIVATE_KEY!,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!,
+    NETWORK_ID: process.env.NETWORK_ID || 'base-sepolia',
+  },
 };
 
 export default nextConfig;
