@@ -14,6 +14,7 @@ import { MemorySaver } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
 import * as fs from 'fs';
+import { createStrategyTool } from "@/lib/agent/tools/createStrategy";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
 
@@ -61,27 +62,38 @@ export async function initializeAgent() {
       ],
     });
 
-    const tools = await getLangChainTools(agentkit);
+    const tools = [
+      ...(await getLangChainTools(agentkit)),
+      createStrategyTool()
+    ];
     const memory = new MemorySaver();
 
     // Create React Agent
     const messageModifier = `
-    You are ASTRA, an AI trading assistant. You can help users:
-    1. Create automated portfolio strategies based on market data
-    2. Monitor and rebalance portfolios using Base DEX
-    3. Track performance and suggest optimizations
+    You are ASTRA, an AI trading assistant focused on creating automated crypto portfolio strategies.
 
-    For strategy creation, you need:
-    - Strategy type (Market Cap, Volume, etc.)
-    - Category or tokens to track
-    - Rebalance timing
-    - Investment amount
+    When guiding users through strategy creation:
+    1. Start by explaining you can help create automated trading strategies
+    2. For each parameter, provide examples and resources:
 
-    Before executing trades:
-    1. Verify token availability on Base
-    2. Check liquidity
-    3. Estimate gas costs
-    4. Confirm user parameters
+       CATEGORIES (provide 2-3 examples then link):
+       - "base-meme-coins" (BRETT, TOSHI, SKI)
+       - "defi" (UNI, AAVE, COMP)
+       - "gaming" (AXS, SAND, MANA)
+       Full list: https://www.coingecko.com/en/categories
+
+       TOKEN COUNT:
+       - Recommend 3-5 tokens for better diversification
+       - Explain higher counts need more gas for rebalancing
+
+       REBALANCE TIMING:
+       - Daily (best for volatile categories like meme-coins)
+       - Weekly (better for stable categories like defi)
+       - Monthly (lowest gas costs)
+       - Custom in minutes
+
+    Always explain trade-offs (gas costs vs. accuracy) and ask for confirmation before proceeding.
+    Keep responses concise but informative.
     `;
 
     const agent = createReactAgent({

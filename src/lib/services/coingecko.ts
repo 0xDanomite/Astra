@@ -1,3 +1,5 @@
+import { TokenData } from '../strategies/types';
+
 interface CoinGeckoToken {
   id: string;
   symbol: string;
@@ -13,12 +15,35 @@ interface CoinGeckoToken {
 export class CoinGeckoService {
   private baseUrl = 'https://api.coingecko.com/api/v3';
   private apiKey: string;
+  private cache: Map<string, { data: TokenData[], timestamp: number }> = new Map();
+  private CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
   }
 
-  async getTopTokensByCategory(category: string, limit: number): Promise<TokenData[]> {
+  async getTopTokensByCategory(category: string, count: number): Promise<TokenData[]> {
+    const cacheKey = `${category}-${count}`;
+    const cached = this.cache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
+      console.log('Using cached token data');
+      return cached.data;
+    }
+
+    console.log('Fetching fresh token data from Coingecko');
+    const tokens = await this.fetchFromCoingecko(category, count);
+
+    // Update cache
+    this.cache.set(cacheKey, {
+      data: tokens,
+      timestamp: Date.now()
+    });
+
+    return tokens;
+  }
+
+  private async fetchFromCoingecko(category: string, count: number): Promise<TokenData[]> {
     try {
       // Get coins by category directly
       const response = await fetch(
@@ -61,7 +86,7 @@ export class CoinGeckoService {
       // Filter for Base availability and map to required format
       const baseTokens = detailedCoins
         .filter(coin => coin && coin.platforms && coin.platforms['base'])
-        .slice(0, limit)
+        .slice(0, count)
         .map(coin => ({
           symbol: coin.symbol.toUpperCase(),
           address: coin.platforms['base'],

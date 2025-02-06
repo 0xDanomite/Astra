@@ -1,4 +1,4 @@
-interface Strategy {
+export interface Strategy {
   id: string;
   name: string;
   type: 'MARKET_CAP' | 'VOLUME' | 'CUSTOM';
@@ -19,4 +19,11 @@ interface Strategy {
   };
   currentHoldings: TokenData[];
   lastRebalance: Date;
+}
+
+export interface TokenData {
+  symbol: string;
+  name: string;
+  marketCap?: number;
+  platforms?: Record<string, string>;
 }
