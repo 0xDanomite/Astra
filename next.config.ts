@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     CDP_API_KEY_PRIVATE_KEY: process.env.CDP_API_KEY_PRIVATE_KEY!,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!,
     NETWORK_ID: process.env.NETWORK_ID || 'base-sepolia',
+    COINGECKO_API_KEY: process.env.COINGECKO_API_KEY!,
   },
 };
 
