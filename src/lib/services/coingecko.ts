@@ -16,7 +16,9 @@ export class CoinGeckoService {
   private baseUrl = 'https://api.coingecko.com/api/v3';
   private apiKey: string;
   private cache: Map<string, { data: TokenData[], timestamp: number }> = new Map();
-  private CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+  private CACHE_DURATION = 15 * 60 * 1000; // Increase to 15 minutes
+  private requestQueue: Promise<any>[] = [];
+  private MAX_CONCURRENT_REQUESTS = 1;
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -27,14 +29,19 @@ export class CoinGeckoService {
     const cached = this.cache.get(cacheKey);
 
     if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
-      console.log('Using cached token data');
       return cached.data;
     }
 
-    console.log('Fetching fresh token data from Coingecko');
-    const tokens = await this.fetchFromCoingecko(category, count);
+    // Queue management for rate limiting
+    while (this.requestQueue.length >= this.MAX_CONCURRENT_REQUESTS) {
+      await this.requestQueue[0];
+      this.requestQueue.shift();
+    }
 
-    // Update cache
+    const request = this.fetchFromCoingecko(category, count);
+    this.requestQueue.push(request);
+    const tokens = await request;
+
     this.cache.set(cacheKey, {
       data: tokens,
       timestamp: Date.now()
