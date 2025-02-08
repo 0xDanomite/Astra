@@ -190,3 +190,89 @@ Chat with Agent
 - Direct CDP integration
 - Fixed permission levels
 - Basic transaction validation
+
+NICE TO HAVE NOTES:
+- in the UI I want to add details about the strategy, even if just saved in local storage for now, I want to display the strategy name, current assets held in the wallet and a clean way to show when next rebalance will occur.  perhaps even the strategy details used to create it.
+
+- this will eventually help me add context to the agent about what it is currently doing.
+
+## UI/Design Implementation
+
+### Layout Structure (Space Command Center Theme)
+
+#### 1. Header (Space Navigation Deck)
+- Logo with constellation animation on left
+- Minimal navigation system for future expansion
+- Wallet connection status with cosmic glow effect
+- Dark, translucent background with particle effects
+- Emergency controls (pause/resume)
+
+#### 2. Main Command Center (Chat Interface)
+- Centrally positioned chat interface
+- Cosmic gradient message bubbles
+  - Agent messages with purple glow
+  - User messages with blue glow
+- Pre-seeded command shortcuts
+  - Horizontal scrollable command options
+  - Quick-access strategy templates
+- Star-field background with parallax
+- Typing indicator with constellation animation
+
+#### 3. Strategy Control Panel (Left Widget)
+- Active strategies displayed as orbital systems
+- Per-strategy display:
+  - Strategy name with cosmic icon
+  - Current holdings visualization
+  - Rebalance countdown timer
+  - Quick-view performance metrics
+- Modal expansion for detailed strategy view
+- Real-time update indicators
+
+#### 4. Performance Monitor (Right Widget)
+- Total portfolio value chart
+  - Cosmic gradient styling
+  - Constellation-point data markers
+- PNL trajectory tracking
+- Key performance indicators
+  - System uptime
+  - Transaction success rate
+  - Network status
+- Real-time data updates
+
+### Interactive Elements
+
+#### Status Indicators
+- Network status ("System Status")
+- Gas prices ("Fuel Levels")
+- API health ("Communication Signals")
+- Transaction states ("Mission Status")
+
+#### Animation Guidelines
+- Particle effects for background ambiance
+- Smooth state transitions (Framer Motion)
+- Orbital loading animations
+- Constellation-forming data visualizations
+- Subtle hover states with cosmic glow
+
+#### Mobile Adaptations
+- Collapsible widgets
+- Simplified particle effects
+- Touch-optimized command interface
+- Maintained space aesthetic
+- Bottom sheet for additional controls
+
+### Technical Implementation
+
+#### Core Components
+- shadcn/ui Card components for widgets
+- Tailwind CSS for space theme styling
+- Framer Motion for smooth animations
+- MagicUI for enhanced effects
+- Responsive grid layout system
+
+#### Performance Considerations
+- Optimized particle effects
+- Lazy-loaded widgets
+- Efficient state management
+- Progressive enhancement
+- Mobile-first approach

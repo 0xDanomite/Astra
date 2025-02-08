@@ -54,7 +54,7 @@ function selectTokens(tokens: TokenData[], count: number, strategy: TokenSelecti
 async function rebalance(strategy: Strategy, currentHoldings: TokenData[]) {
   const allTokens = await coingeckoService.getTopTokensByCategory(
     strategy.parameters.category || 'base-meme-coins',
-    10
+    25
   );
 
   // Calculate which tokens to sell and buy
@@ -76,7 +76,7 @@ export async function executeStrategy(strategy: Strategy) {
     if (isInitialSetup) {
       const baseTokens = await coingeckoService.getTopTokensByCategory(
         strategy.parameters.category!,
-        10
+        25
       );
 
       console.log(`Found ${baseTokens.length} tokens on Base with data:`,
@@ -128,7 +128,7 @@ export async function executeStrategy(strategy: Strategy) {
       // Rebalancing with optimization
       const baseTokens = await coingeckoService.getTopTokensByCategory(
         strategy.parameters.category!,
-        10
+        25
       );
 
       // Select new tokens using strategy
