@@ -125,24 +125,51 @@ export async function executeStrategy(strategy: Strategy) {
 
       console.log('Stored holdings:', strategy.currentHoldings);
     } else {
-      // Rebalancing with same selection strategy
+      // Rebalancing with optimization
       const baseTokens = await coingeckoService.getTopTokensByCategory(
         strategy.parameters.category!,
         10
       );
 
-      // Select new tokens using same strategy
+      // Select new tokens using strategy
       const newSelectedTokens = selectTokens(
         baseTokens,
         strategy.parameters.tokenCount,
         strategy.type as TokenSelectionStrategy
       );
 
-      // Sell existing tokens first
-      wallet = await initializeWallet();
-      console.log("Selling phase - Current holdings:", strategy.currentHoldings);
+      // Compare current holdings with new selection
+      const tokensToSell = strategy.currentHoldings.filter(
+        currentToken => !newSelectedTokens.find(
+          newToken => newToken.address === currentToken.address
+        )
+      );
 
-      for (const token of strategy.currentHoldings) {
+      const tokensToBuy = newSelectedTokens.filter(
+        newToken => !strategy.currentHoldings.find(
+          currentToken => currentToken.address === newToken.address
+        )
+      );
+
+      console.log('Rebalance analysis:', {
+        currentHoldings: strategy.currentHoldings.map(t => t.symbol),
+        newSelection: newSelectedTokens.map(t => t.symbol),
+        toSell: tokensToSell.map(t => t.symbol),
+        toBuy: tokensToBuy.map(t => t.symbol)
+      });
+
+      if (tokensToSell.length === 0 && tokensToBuy.length === 0) {
+        console.log('No rebalancing needed - current holdings match optimal selection');
+        return {
+          success: true,
+          holdings: strategy.currentHoldings,
+          message: 'Holdings already optimal'
+        };
+      }
+
+      // Sell only tokens that aren't in new selection
+      wallet = await initializeWallet();
+      for (const token of tokensToSell) {
         try {
           const balance = await wallet.getBalance(token.address);
           console.log(`Balance for ${token.symbol} (${token.address}): ${balance}`);
@@ -166,35 +193,43 @@ export async function executeStrategy(strategy: Strategy) {
         }
       }
 
-      // Clear holdings after selling
-      strategy.currentHoldings = [];
+      // Remove sold tokens from holdings
+      strategy.currentHoldings = strategy.currentHoldings.filter(
+        token => !tokensToSell.find(t => t.address === token.address)
+      );
 
-      // Buy new selected tokens
-      const usdcBalance = await wallet.getBalance(Coinbase.assets.Usdc);
-      if (usdcBalance > 0) {
-        const perTokenAllocation = usdcBalance / newSelectedTokens.length;
+      // Buy only new tokens
+      if (tokensToBuy.length > 0) {
+        const usdcBalance = await wallet.getBalance(Coinbase.assets.Usdc);
+        if (usdcBalance > 0) {
+          const perTokenAllocation = usdcBalance / tokensToBuy.length;
 
-        for (const token of newSelectedTokens) {
-          try {
-            console.log(`Buying ${token.symbol} with ${perTokenAllocation} USDC`);
-            const trade = await wallet.createTrade({
-              amount: perTokenAllocation,
-              fromAssetId: Coinbase.assets.Usdc,
-              toAssetId: token.address,
-              gasless: true,
-              slippageTolerance: 0.02
-            });
-            await trade.wait();
-            strategy.currentHoldings.push(token);
-          } catch (error) {
-            console.error(`Failed to buy ${token.symbol}:`, error);
+          for (const token of tokensToBuy) {
+            try {
+              console.log(`Buying ${token.symbol} with ${perTokenAllocation} USDC`);
+              const trade = await wallet.createTrade({
+                amount: perTokenAllocation,
+                fromAssetId: Coinbase.assets.Usdc,
+                toAssetId: token.address,
+                gasless: true,
+                slippageTolerance: 0.02
+              });
+              await trade.wait();
+              strategy.currentHoldings.push(token);
+            } catch (error) {
+              console.error(`Failed to buy ${token.symbol}:`, error);
+            }
           }
         }
       }
     }
 
     strategy.lastRebalance = new Date();
-    return { success: true, holdings: strategy.currentHoldings };
+    return {
+      success: true,
+      holdings: strategy.currentHoldings,
+      message: 'Rebalancing completed'
+    };
   } catch (error) {
     console.error('Strategy execution error:', error);
     return { success: false, error: error.message };
