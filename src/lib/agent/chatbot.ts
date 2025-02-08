@@ -12,11 +12,20 @@ import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import * as fs from 'fs';
 import { createStrategyTool } from "@/lib/agent/tools/createStrategy";
+import { BufferMemory } from "langchain/memory";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { ChatMessageHistory } from "langchain/memory";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
+
+// Extend ChatAnthropic type to include required BaseChatModel properties
+type ExtendedChatAnthropic = ChatAnthropic & BaseChatModel & {
+  disableStreaming: boolean;
+};
 
 export async function initializeAgent() {
   try {
@@ -30,11 +39,13 @@ export async function initializeAgent() {
         console.error("Error reading wallet data:", error);
       }
     }
-    // Initialize LLM with OpenAI
-    const llm = new ChatOpenAI({
-      modelName: "gpt-3.5-turbo",
-      openAIApiKey: process.env.OPENAI_API_KEY,
-    });
+    // Initialize LLM with Anthropic
+    const llm = new ChatAnthropic({
+      modelName: "claude-3-5-sonnet-20241022",
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+      temperature: 0.7,
+      streaming: true
+    }) as ExtendedChatAnthropic;
 
     // Configure CDP Wallet Provider
     const config = {
@@ -64,59 +75,63 @@ export async function initializeAgent() {
 
     const tools = [
       ...(await getLangChainTools(agentkit)),
-      createStrategyTool()
+      createStrategyTool({
+        validateParameters: true,
+        requireConfirmation: true,
+        persistStrategy: true
+      })
     ];
-    const memory = new MemorySaver();
 
-    // Create React Agent
+    const messageHistory = new ChatMessageHistory();
+    const memoryStore = new MemoryVectorStore();
+
+    // Create React Agent with enhanced memory and strategy context
     const messageModifier = `
-    You are ASTRA, an AI trading assistant focused on creating automated crypto portfolio strategies on the BASE network.
+    You are ASTRA, an AI trading assistant. When you receive strategy parameters and confirmation, you MUST execute the create_strategy tool immediately with these parameters:
 
-    Guide users through strategy creation with these steps:
+    WHEN USER MENTIONS:
+    - "random" or "randomly" -> set type: "RANDOM"
+    - "market cap" or "highest cap" -> set type: "MARKET_CAP"
+    - "volume" or "most traded" -> set type: "VOLUME"
 
-    1. INVESTMENT SETUP
-       - Ask about their investment amount (minimum 100 USDC)
-       - Explain how portfolio automation works
-       - Highlight the benefits of market-driven rebalancing
+    EXAMPLES:
+    1. User: "buy/sell 1 RANDOM meme coin"
+       Action: type = "RANDOM"
+    2. User: "highest market cap coins"
+       Action: type = "MARKET_CAP"
+    3. User: "most traded by volume"
+       Action: type = "VOLUME"
 
-    2. CATEGORY FOCUS
-       - Available categories: meme coins, defi, gaming, metaverse, etc.
-       - Explain how category focus affects token selection
-       - Help match category to their investment goals
-       - Highlight that tokens are selected by market cap within category
+    YOU MUST EXECUTE:
+    create_strategy tool with exact parameters:
+    {
+      amount: X,
+      category: Y,
+      tokenCount: N,
+      rebalanceMinutes: Z,
+      type: T,  // MUST be "RANDOM", "MARKET_CAP", or "VOLUME" based on user's description
+      confirmed: true
+    }
 
-    3. PORTFOLIO COMPOSITION
-       - Recommend token count (3-10 tokens)
-       - Explain diversification benefits
-       - Discuss how market cap weighting works
-       - Note that tokens auto-update based on market performance
+    Example:
+    User: "Create a strategy with 100 USDC, base-meme-coins category, 3 tokens, rebalance every 60 minutes, random selection"
+    Action: Execute create_strategy with {amount: 100, category: "base-meme-coins", tokenCount: 3, rebalanceMinutes: 60, type: "RANDOM", confirmed: true}
 
-    4. REBALANCING STRATEGY
-       - Explain how automated rebalancing maintains optimal allocation
-       - Discuss timing options (daily/weekly/monthly)
-       - Help choose frequency based on category volatility
-       - Note that rebalancing responds to market changes
-
-    5. REVIEW & LAUNCH
-       - Summarize complete strategy
-       - Confirm investment amount and parameters
-       - Explain what happens after launch
-       - Set expectations for portfolio management
-
-    KEY POINTS TO EMPHASIZE:
-    - Fully automated portfolio management
-    - Market-driven token selection
-    - Smart rebalancing for optimal performance
-    - Professional-grade strategy execution
-
-    Remember: Focus on helping users create effective, market-responsive strategies that align with their goals.
+    DO NOT ask for parameters again after receiving them. DO NOT ask for confirmation after receiving "yes" or "confirm". EXECUTE IMMEDIATELY.
     `;
 
     const agent = createReactAgent({
       llm,
       tools,
-      checkpointSaver: memory,
       messageModifier,
+      config: {
+        memory: messageHistory,
+        memoryStore,
+        rememberConversation: true,
+        contextWindow: 4096,
+        maxIterations: 10,
+        returnIntermediateSteps: true,
+      }
     });
 
     return { agent, agentkit, tools };

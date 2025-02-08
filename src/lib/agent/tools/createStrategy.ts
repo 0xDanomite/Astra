@@ -1,40 +1,47 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
+import { executeStrategy } from "@/lib/strategies/executor";
+import { StrategyScheduler } from "@/lib/strategies/scheduler";
 
-const strategySchema = z.object({
-  name: z.string(),
-  type: z.enum(["MARKET_CAP", "VOLUME", "CUSTOM"]),
-  category: z.string(),
-  tokenCount: z.number(),
-  rebalanceTime: z.string(),
-  totalAllocation: z.number()
-});
+interface StrategyToolConfig {
+  validateParameters?: boolean;
+  requireConfirmation?: boolean;
+  persistStrategy?: boolean;
+}
 
 export const createStrategyTool = () => {
   return new DynamicStructuredTool({
     name: "create_strategy",
-    description: "Creates a new trading strategy with the specified parameters",
-    schema: strategySchema,
-    func: async (params) => {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      const response = await fetch(`${baseUrl}/api/strategy/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parameters: params })
-      });
+    description: "Creates a trading strategy with specified parameters",
+    schema: z.object({
+      amount: z.number().min(10),
+      category: z.string(),
+      tokenCount: z.number().min(1).max(10),
+      rebalanceMinutes: z.number(),
+      type: z.enum(['RANDOM', 'MARKET_CAP', 'VOLUME']),
+      confirmed: z.boolean()
+    }),
+    func: async ({ amount, category, tokenCount, rebalanceMinutes, type, confirmed }) => {
+      try {
+        const strategy = {
+          id: crypto.randomUUID(),
+          type,
+          parameters: {
+            totalAllocation: amount,
+            category,
+            tokenCount,
+            rebalanceTime: `${rebalanceMinutes}min`
+          },
+          currentHoldings: []
+        };
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error);
+        await executeStrategy(strategy);
+        await StrategyScheduler.getInstance().scheduleStrategy(strategy);
+
+        return `Strategy created! ID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC\nCategory: ${category}\nRebalance: ${rebalanceMinutes}min`;
+      } catch (error) {
+        return `Failed to create strategy: ${error.message}`;
       }
-
-      return `Strategy created successfully!
-      ID: ${result.strategy.id}
-      Type: ${result.strategy.type}
-      Category: ${result.strategy.parameters.category}
-      Rebalance: ${result.strategy.parameters.rebalanceTime}
-      Tokens: ${result.strategy.parameters.tokenCount}
-      Allocation: ${result.strategy.parameters.totalAllocation} USDC`;
     }
   });
 };

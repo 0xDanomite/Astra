@@ -26,4 +26,5 @@ export interface TokenData {
   name: string;
   marketCap?: number;
   platforms?: Record<string, string>;
+  address?: string;
 }

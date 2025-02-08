@@ -24,90 +24,58 @@ export class CoinGeckoService {
     this.apiKey = apiKey;
   }
 
-  async getTopTokensByCategory(category: string, count: number): Promise<TokenData[]> {
-    const cacheKey = `${category}-${count}`;
-    const cached = this.cache.get(cacheKey);
+  async getTopTokensByCategory(category: string, limit: number): Promise<TokenData[]> {
+    const baseTokens = await this.fetchBaseTokens(category, limit);
 
-    if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
-      return cached.data;
-    }
+    // Fetch detailed data for each token
+    const detailedTokens = await Promise.all(
+      baseTokens.map(async (token) => {
+        try {
+          const details = await this.fetchTokenDetails(token.id);
+          return {
+            ...token,
+            market_cap: details.market_data?.market_cap?.usd,
+            total_volume: details.market_data?.total_volume?.usd,
+            address: details.platforms?.base // Make sure we get the Base address
+          };
+        } catch (error) {
+          console.error(`Failed to fetch details for ${token.symbol}:`, error);
+          return token;
+        }
+      })
+    );
 
-    // Queue management for rate limiting
-    while (this.requestQueue.length >= this.MAX_CONCURRENT_REQUESTS) {
-      await this.requestQueue[0];
-      this.requestQueue.shift();
-    }
+    console.log('Detailed token data:', detailedTokens.map(t => ({
+      symbol: t.symbol,
+      market_cap: t.market_cap,
+      volume: t.total_volume,
+      address: t.address
+    })));
 
-    const request = this.fetchFromCoingecko(category, count);
-    this.requestQueue.push(request);
-    const tokens = await request;
-
-    this.cache.set(cacheKey, {
-      data: tokens,
-      timestamp: Date.now()
-    });
-
-    return tokens;
+    return detailedTokens;
   }
 
-  private async fetchFromCoingecko(category: string, count: number): Promise<TokenData[]> {
-    try {
-      // Get coins by category directly
-      const response = await fetch(
-        `${this.baseUrl}/coins/markets?vs_currency=usd&category=${category}&order=market_cap_desc&per_page=100&sparkline=false&x_cg_demo_api_key=${this.apiKey}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`CoinGecko API error: ${response.statusText}`);
+  private async fetchBaseTokens(category: string, limit: number): Promise<TokenData[]> {
+    const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=${category}&per_page=${limit}`;
+    const response = await fetch(url, {
+      headers: {
+        'accept': 'application/json',
+        'x-cg-demo-api-key': process.env.COINGECKO_API_KEY as string
       }
+    });
+    const data = await response.json();
+    return data;
+  }
 
-      const coins = await response.json();
-      console.log(`Found ${coins.length} coins for category ${category}`); // Debug log
-
-      // Get detailed info for each coin to check Base availability
-      const detailedCoins = await Promise.all(
-        coins.map(async (coin: any) => {
-          try {
-            const detailResponse = await fetch(
-              `${this.baseUrl}/coins/${coin.id}?x_cg_demo_api_key=${this.apiKey}&localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`
-            );
-            if (!detailResponse.ok) return null;
-            const detail = await detailResponse.json();
-
-            // Debug log for platforms
-            console.log(`Coin ${coin.id} platforms:`, detail.platforms);
-
-            return {
-              symbol: coin.symbol,
-              name: coin.name,
-              marketCap: coin.market_cap,
-              platforms: detail.platforms
-            };
-          } catch (error) {
-            console.error(`Error fetching details for ${coin.id}:`, error);
-            return null;
-          }
-        })
-      );
-
-      // Filter for Base availability and map to required format
-      const baseTokens = detailedCoins
-        .filter(coin => coin && coin.platforms && coin.platforms['base'])
-        .slice(0, count)
-        .map(coin => ({
-          symbol: coin.symbol.toUpperCase(),
-          address: coin.platforms['base'],
-          marketCap: coin.marketCap,
-          category: category
-        }));
-
-      console.log(`Found ${baseTokens.length} tokens on Base`); // Debug log
-      return baseTokens;
-
-    } catch (error) {
-      console.error('Failed to fetch from CoinGecko:', error);
-      throw error;
-    }
+  private async fetchTokenDetails(coinId: string): Promise<any> {
+    const url = `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`;
+    const response = await fetch(url, {
+      headers: {
+        'accept': 'application/json',
+        'x-cg-demo-api-key': process.env.COINGECKO_API_KEY as string
+      }
+    });
+    return response.json();
   }
 
   // Get available categories

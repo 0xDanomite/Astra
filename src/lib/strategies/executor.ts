@@ -2,42 +2,59 @@ import { Strategy, TokenData } from './types';
 import { coingeckoService } from '../services/coingecko';
 import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import * as fs from 'fs';
+import { CdpWalletProvider } from '@coinbase/coinbase-sdk';
+import { initializeWallet } from "@/lib/wallet";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
 
-// Initial setup - only buys
-async function initialSetup(strategy: Strategy) {
-  const allTokens = await coingeckoService.getTopTokensByCategory(
-    strategy.parameters.category || 'base-meme-coins',
-    100
+type TokenSelectionStrategy = 'RANDOM' | 'MARKET_CAP' | 'VOLUME';
+
+function selectTokens(tokens: TokenData[], count: number, strategy: TokenSelectionStrategy): TokenData[] {
+  // Filter out tokens with missing required data first
+  const validTokens = tokens.filter(token =>
+    token.address &&
+    (strategy !== 'MARKET_CAP' || token.market_cap !== undefined) &&
+    (strategy !== 'VOLUME' || token.total_volume !== undefined)
   );
 
-  // For testnet, use test tokens that we know exist
-  const testTokens = [
-    {
-      symbol: 'WETH',
-      name: 'Wrapped Ether',
-      platforms: { 'base-sepolia': '0x4200000000000000000000000000000000000006' }
-    },
-    {
-      symbol: 'USDC',
-      name: 'USD Coin',
-      platforms: { 'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e' }
-    }
-  ].slice(0, strategy.parameters.tokenCount);
+  console.log(`Valid tokens for ${strategy} strategy:`,
+    validTokens.map(t => ({
+      symbol: t.symbol,
+      address: t.address,
+      market_cap: t.market_cap,
+      volume: t.total_volume
+    }))
+  );
 
-  console.log('Using testnet tokens:', testTokens);
+  switch (strategy) {
+    case 'RANDOM':
+      // Shuffle array and take first n elements
+      const shuffled = [...validTokens].sort(() => Math.random() - 0.5);
+      console.log('Randomly selected from:', shuffled.map(t => t.symbol).join(', '));
+      return shuffled.slice(0, count);
 
-  const perTokenAllocation = strategy.parameters.totalAllocation / strategy.parameters.tokenCount;
+    case 'MARKET_CAP':
+      const byMarketCap = [...validTokens]
+        .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
+      console.log('Sorted by market cap:', byMarketCap.map(t => `${t.symbol} (${t.market_cap})`).join(', '));
+      return byMarketCap.slice(0, count);
 
-  return { topTokens: testTokens, perTokenAllocation };
+    case 'VOLUME':
+      const byVolume = [...validTokens]
+        .sort((a, b) => (b.total_volume || 0) - (a.total_volume || 0));
+      console.log('Sorted by volume:', byVolume.map(t => `${t.symbol} (${t.total_volume})`).join(', '));
+      return byVolume.slice(0, count);
+
+    default:
+      throw new Error(`Unknown token selection strategy: ${strategy}`);
+  }
 }
 
 // Rebalance - includes sells if needed
 async function rebalance(strategy: Strategy, currentHoldings: TokenData[]) {
   const allTokens = await coingeckoService.getTopTokensByCategory(
     strategy.parameters.category || 'base-meme-coins',
-    100
+    10
   );
 
   // Calculate which tokens to sell and buy
@@ -53,35 +70,51 @@ async function rebalance(strategy: Strategy, currentHoldings: TokenData[]) {
 
 export async function executeStrategy(strategy: Strategy) {
   try {
-    // Initialize CDP wallet and configuration
-    const wallet = await initializeWallet();
-
-    // Determine if this is initial setup or rebalance
-    const isInitialSetup = strategy.currentHoldings.length === 0;
+    let wallet = await initializeWallet();
+    const isInitialSetup = !strategy.currentHoldings || strategy.currentHoldings.length === 0;
 
     if (isInitialSetup) {
-      // Get top tokens for the category based on market cap
-      const topTokens = await coingeckoService.getTopTokensByCategory(
+      const baseTokens = await coingeckoService.getTopTokensByCategory(
         strategy.parameters.category!,
-        strategy.parameters.tokenCount
+        10
+      );
+
+      console.log(`Found ${baseTokens.length} tokens on Base with data:`,
+        baseTokens.map(t => ({
+          symbol: t.symbol,
+          market_cap: t.market_cap,
+          volume: t.total_volume
+        }))
+      );
+
+      console.log('TYPE', strategy.type);
+      const selectedTokens = selectTokens(
+        baseTokens,
+        strategy.parameters.tokenCount,
+        strategy.type as TokenSelectionStrategy
+      );
+
+      console.log('Selected tokens for trading:',
+        selectedTokens.map(t =>
+          `${t.symbol} (${t.address}) - MC: ${t.market_cap}, Vol: ${t.total_volume}`
+        )
       );
 
       const perTokenAllocation = strategy.parameters.totalAllocation / strategy.parameters.tokenCount;
 
-      // Execute initial buys
-      const trades = await Promise.all(topTokens.map(async (token) => {
+      const trades = await Promise.all(selectedTokens.map(async (token) => {
         try {
-          console.log(`Initial allocation: ${perTokenAllocation} USDC -> ${token.symbol}`);
+          console.log(`Initial allocation: ${perTokenAllocation} USDC -> ${token.symbol} (${token.address})`);
           const trade = await wallet.createTrade({
             amount: perTokenAllocation,
             fromAssetId: Coinbase.assets.Usdc,
-            toAssetId: token.symbol,
+            toAssetId: token.address,
             gasless: true
           });
           await trade.wait();
           return { token, status: 'SUCCESS' };
         } catch (error) {
-          console.error(`Trade failed for ${token.symbol}:`, error);
+          console.error(`Trade failed for ${token.symbol} (${token.address}):`, error);
           return { token, status: 'FAILED', error };
         }
       }));
@@ -90,43 +123,81 @@ export async function executeStrategy(strategy: Strategy) {
         .filter(t => t.status === 'SUCCESS')
         .map(t => t.token);
 
+      console.log('Stored holdings:', strategy.currentHoldings);
     } else {
-      // Get current top tokens for rebalancing
-      const topTokens = await coingeckoService.getTopTokensByCategory(
+      // Rebalancing with same selection strategy
+      const baseTokens = await coingeckoService.getTopTokensByCategory(
         strategy.parameters.category!,
-        strategy.parameters.tokenCount
+        10
       );
 
-      // Calculate rebalancing needs
-      const { tokensToSell, tokensToBuy } = calculateRebalancingNeeds(
-        strategy.currentHoldings,
-        topTokens,
-        strategy.parameters.tokenCount
+      // Select new tokens using same strategy
+      const newSelectedTokens = selectTokens(
+        baseTokens,
+        strategy.parameters.tokenCount,
+        strategy.type as TokenSelectionStrategy
       );
 
-      // Execute sells first
-      await executeTokenSells(wallet, tokensToSell, strategy.parameters.totalAllocation);
+      // Sell existing tokens first
+      wallet = await initializeWallet();
+      console.log("Selling phase - Current holdings:", strategy.currentHoldings);
 
-      // Then execute buys
-      await executeTokenBuys(wallet, tokensToBuy, strategy.parameters.totalAllocation);
+      for (const token of strategy.currentHoldings) {
+        try {
+          const balance = await wallet.getBalance(token.address);
+          console.log(`Balance for ${token.symbol} (${token.address}): ${balance}`);
 
-      // Update holdings
-      strategy.currentHoldings = topTokens;
+          if (balance > 0) {
+            const sellAmount = balance * 0.99;
+            console.log(`Selling ${sellAmount} of ${token.symbol}`);
+
+            wallet = await initializeWallet();
+            const trade = await wallet.createTrade({
+              amount: sellAmount,
+              fromAssetId: token.address,
+              toAssetId: Coinbase.assets.Usdc,
+              gasless: true,
+              slippageTolerance: 0.02
+            });
+            await trade.wait();
+          }
+        } catch (error) {
+          console.error(`Failed to sell ${token.symbol}:`, error);
+        }
+      }
+
+      // Clear holdings after selling
+      strategy.currentHoldings = [];
+
+      // Buy new selected tokens
+      const usdcBalance = await wallet.getBalance(Coinbase.assets.Usdc);
+      if (usdcBalance > 0) {
+        const perTokenAllocation = usdcBalance / newSelectedTokens.length;
+
+        for (const token of newSelectedTokens) {
+          try {
+            console.log(`Buying ${token.symbol} with ${perTokenAllocation} USDC`);
+            const trade = await wallet.createTrade({
+              amount: perTokenAllocation,
+              fromAssetId: Coinbase.assets.Usdc,
+              toAssetId: token.address,
+              gasless: true,
+              slippageTolerance: 0.02
+            });
+            await trade.wait();
+            strategy.currentHoldings.push(token);
+          } catch (error) {
+            console.error(`Failed to buy ${token.symbol}:`, error);
+          }
+        }
+      }
     }
 
     strategy.lastRebalance = new Date();
-    return {
-      success: true,
-      holdings: strategy.currentHoldings,
-      timestamp: new Date()
-    };
+    return { success: true, holdings: strategy.currentHoldings };
   } catch (error) {
     console.error('Strategy execution error:', error);
-    return {
-      success: false,
-      error: error.message,
-      timestamp: new Date()
-    };
+    return { success: false, error: error.message };
   }
 }
 
@@ -163,11 +234,18 @@ async function initializeWallet() {
 }
 
 async function executeTokenSells(wallet: Wallet, tokensToSell: TokenData[], totalAllocation: number) {
+  // Guard against undefined or empty tokensToSell array
+  if (!tokensToSell || tokensToSell.length === 0) {
+    console.log('No tokens to sell during rebalance');
+    return [];
+  }
+
   const perTokenAllocation = totalAllocation / tokensToSell.length;
 
+  const results = [];
   for (const token of tokensToSell) {
     try {
-      console.log(`Rebalance sell: ${token.symbol} -> USDC`);
+      console.log(`Selling ${token.symbol} for USDC`);
       const trade = await wallet.createTrade({
         amount: perTokenAllocation,
         fromAssetId: token.symbol,
@@ -175,10 +253,13 @@ async function executeTokenSells(wallet: Wallet, tokensToSell: TokenData[], tota
         gasless: true
       });
       await trade.wait();
+      results.push({ token, status: 'SUCCESS' });
     } catch (error) {
       console.error(`Failed to sell ${token.symbol}:`, error);
+      results.push({ token, status: 'FAILED', error });
     }
   }
+  return results;
 }
 
 async function executeTokenBuys(wallet: Wallet, tokensToBuy: TokenData[], totalAllocation: number) {
