@@ -29,8 +29,8 @@ export async function POST(request: Request) {
       message: 'Wallet data updated successfully',
       data: {
         userId,
-        walletId: updatedData.walletId,
-        networkId: updatedData.networkId,
+        walletId: updatedData?.walletId,
+        networkId: updatedData?.networkId,
         // Don't return the seed in the response for security
       }
     });
