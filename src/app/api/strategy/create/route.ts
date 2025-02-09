@@ -11,10 +11,14 @@ export async function POST(request: Request) {
   try {
     console.log('Starting strategy creation...');
 
-    const { parameters } = await request.json();
+    const { parameters, userId } = await request.json();
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
     console.log('Received parameters:', parameters);
 
-    const { agentkit } = await initializeAgent();
+    const { agentkit } = await initializeAgent(userId);
     console.log('Agent initialized');
 
     const nillionService = NillionService.getInstance();
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
 
     // Get wallet data from Nillion
     console.log('Fetching wallet data...');
-    const walletData = await nillionService.getWalletData();
+    const walletData = await nillionService.getWalletData(userId);
     let wallet;
 
     if (walletData) {
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
         wallet = await Wallet.create();
         const exportData = wallet.export();
         await nillionService.storeWalletData({
+          userId,
           walletId: exportData.walletId,
           seed: exportData.seed,
           networkId: exportData.networkId || 'base-sepolia',
@@ -82,6 +87,7 @@ export async function POST(request: Request) {
     console.log('Creating strategy...');
     const strategy: Strategy = {
       id: `strategy-${Date.now()}`,
+      userId,
       type: parameters.type,
       status: 'ACTIVE',
       parameters: {

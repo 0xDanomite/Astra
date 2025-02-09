@@ -12,10 +12,17 @@ export class DatabaseService {
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
+      console.error('Supabase credentials missing. URL:', !!supabaseUrl, 'Key:', !!supabaseKey);
       throw new Error('Missing Supabase environment variables');
     }
 
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    try {
+      this.supabase = createClient(supabaseUrl, supabaseKey);
+      console.log('Supabase client initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize Supabase client:', error);
+      throw error;
+    }
   }
 
   static getInstance(): DatabaseService {
@@ -55,13 +62,8 @@ export class DatabaseService {
     const { error } = await this.supabase
       .from('strategies')
       .upsert({
-        id: strategy.id,
-        type: strategy.type,
-        parameters: strategy.parameters,
-        current_holdings: strategy.current_holdings || [],
-        status: strategy.status,
-        created_at: strategy.created_at || new Date().toISOString(),
-        last_updated: new Date().toISOString()
+        ...strategy,
+        userId: strategy.userId
       });
 
     if (error) throw error;
@@ -97,15 +99,16 @@ export class DatabaseService {
     if (error) throw error;
   }
 
-  async getActiveStrategies(): Promise<Strategy[]> {
+  async getActiveStrategies(userId: string): Promise<Strategy[]> {
     const { data, error } = await this.supabase
       .from('strategies')
       .select('*')
       .eq('status', 'ACTIVE')
+      .eq('userId', userId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    return data as Strategy[];
   }
 
   async testConnection() {

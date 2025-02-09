@@ -3,15 +3,16 @@ import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { Strategy, TokenData } from '@/lib/strategies/types';
 import { coingeckoService } from '@/lib/services/coingecko';
 import { NillionService } from '@/lib/services/nillion';
+import { DatabaseService } from '@/lib/services/database';
 
-async function initializeWallet() {
+async function initializeWallet(userId: string) {
   Coinbase.configure({
     apiKeyName: process.env.CDP_API_KEY_NAME!,
     privateKey: process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n")
   });
 
   const nillionService = NillionService.getInstance();
-  const walletData = await nillionService.getWalletData();
+  const walletData = await nillionService.getWalletData(userId);
 
   if (!walletData) {
     throw new Error('No wallet data found');
@@ -29,9 +30,14 @@ async function initializeWallet() {
 export async function POST(request: Request) {
   try {
     const { strategy } = await request.json();
-    const wallet = await initializeWallet();
+    if (!strategy.userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
 
-    const isInitialSetup = !strategy.currentHoldings || strategy.currentHoldings.length === 0;
+    const wallet = await initializeWallet(strategy.userId);
+    const db = DatabaseService.getInstance();
+
+    const isInitialSetup = !strategy.current_holdings || strategy.current_holdings.length === 0;
 
     if (isInitialSetup) {
       const baseTokens = await coingeckoService.getTopTokensByCategory(
@@ -44,7 +50,7 @@ export async function POST(request: Request) {
       const selectedTokens = selectTokens(
         baseTokens,
         strategy.parameters.tokenCount,
-        strategy.type as TokenSelectionStrategy
+        strategy.type
       );
 
       const perTokenAllocation = strategy.parameters.totalAllocation / strategy.parameters.tokenCount;
@@ -56,7 +62,6 @@ export async function POST(request: Request) {
             amount: perTokenAllocation,
             fromAssetId: Coinbase.assets.Usdc,
             toAssetId: token.address,
-            // slippageTolerance: 0.02
           });
           await trade.wait();
           return { token, status: 'SUCCESS' };
@@ -67,6 +72,13 @@ export async function POST(request: Request) {
       }));
 
       const successfulTrades = trades.filter(t => t.status === 'SUCCESS').map(t => t.token);
+      strategy.current_holdings = successfulTrades;
+
+      // Update strategy in database
+      await db.storeStrategy({
+        ...strategy,
+        last_updated: new Date().toISOString()
+      });
 
       return NextResponse.json({
         success: true,
@@ -84,17 +96,17 @@ export async function POST(request: Request) {
       const newSelectedTokens = selectTokens(
         baseTokens,
         strategy.parameters.tokenCount,
-        strategy.type as TokenSelectionStrategy
+        strategy.type
       );
 
-      const tokensToSell = strategy.currentHoldings.filter(
+      const tokensToSell = strategy.current_holdings.filter(
         currentToken => !newSelectedTokens.find(
           newToken => newToken.address === currentToken.address
         )
       );
 
       const tokensToBuy = newSelectedTokens.filter(
-        newToken => !strategy.currentHoldings.find(
+        newToken => !strategy.current_holdings.find(
           currentToken => currentToken.address === newToken.address
         )
       );
@@ -118,7 +130,7 @@ export async function POST(request: Request) {
       }
 
       // Remove sold tokens from holdings
-      const updatedHoldings = strategy.currentHoldings.filter(
+      strategy.current_holdings = strategy.current_holdings.filter(
         token => !tokensToSell.find(t => t.address === token.address)
       );
 
@@ -136,7 +148,7 @@ export async function POST(request: Request) {
                 toAssetId: token.address,
               });
               await trade.wait();
-              updatedHoldings.push(token);
+              strategy.current_holdings.push(token);
             } catch (error) {
               console.error(`Failed to buy ${token.symbol}:`, error);
             }
@@ -144,9 +156,15 @@ export async function POST(request: Request) {
         }
       }
 
+      // Update strategy in database
+      await db.storeStrategy({
+        ...strategy,
+        last_updated: new Date().toISOString()
+      });
+
       return NextResponse.json({
         success: true,
-        holdings: updatedHoldings,
+        holdings: strategy.current_holdings,
         message: 'Rebalancing completed successfully'
       });
     }
@@ -187,3 +205,4 @@ function selectTokens(tokens: TokenData[], count: number, strategy: TokenSelecti
       throw new Error(`Unknown token selection strategy: ${strategy}`);
   }
 }
+

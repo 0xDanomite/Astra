@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader } from 'lucide-react';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -20,6 +21,7 @@ export function CommandCenter() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { userId } = useAuth();
 
   const sendMessage = async (content: string) => {
     try {
@@ -28,7 +30,7 @@ export function CommandCenter() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ message: content,  userId  }),
       });
 
       if (!response.ok) {

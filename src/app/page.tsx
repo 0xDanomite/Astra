@@ -3,31 +3,44 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StrategyScheduler } from '@/lib/strategies/scheduler';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export default function Home() {
   const router = useRouter();
   const [isLaunching, setIsLaunching] = useState(false);
+  const { userId, isAuthenticated, login, isLoading } = useAuth();
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      StrategyScheduler.getInstance().initializeScheduler();
+    if (typeof window !== 'undefined' && userId) {
+      StrategyScheduler.getInstance().initializeScheduler(userId);
     }
-  }, []);
+  }, [userId]);
 
   const handleLaunch = async () => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+
     setIsLaunching(true);
     document.body.classList.add('launching');
 
     try {
-      const response = await fetch('/api/services/init', { method: 'POST' });
+      const response = await fetch('/api/services/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
       if (!response.ok) throw new Error('Initialization failed');
+
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2000);
     } catch (error) {
       console.error('Initialization error:', error);
+      setIsLaunching(false);
+      document.body.classList.remove('launching');
     }
-
-    setTimeout(() => {
-      router.push('/dashboard');
-    }, 2000);
   };
 
   return (
@@ -55,6 +68,7 @@ export default function Home() {
         {!isLaunching ? (
           <button
             onClick={handleLaunch}
+            disabled={isLoading}
             className="mt-12 launch-button px-8 py-4 text-xl font-bold rounded-full
                      bg-cosmic-gradient hover:bg-cosmic-gradient/90
                      transform hover:scale-105 transition-all duration-300
@@ -62,7 +76,7 @@ export default function Home() {
                      shadow-[0_0_20px_rgba(92,36,255,0.5)]
                      hover:shadow-[0_0_30px_rgba(92,36,255,0.7)]"
           >
-            Initiate Launch Sequence
+            {isLoading ? 'Loading...' : isAuthenticated ? 'Initiate Launch Sequence' : 'Connect Wallet'}
           </button>
         ) : (
           <div className="launch-sequence mt-12">

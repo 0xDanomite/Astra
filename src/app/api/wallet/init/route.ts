@@ -3,8 +3,13 @@ import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { NillionService } from '@/lib/services/nillion';
 // import { writeFileSync } from 'node:fs';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const { userId } = await request.json();
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
     const nillionService = NillionService.getInstance();
 
     // Initialize CDP SDK server-side only
@@ -13,7 +18,7 @@ export async function POST() {
       privateKey: process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n")
     });
 
-    const walletData = await nillionService.getWalletData();
+    const walletData = await nillionService.getWalletData(userId);
     let wallet;
 
     if (walletData) {
@@ -26,6 +31,7 @@ export async function POST() {
       wallet = await Wallet.create();
       const exportData = wallet.export();
       await nillionService.storeWalletData({
+        userId,
         walletId: exportData.walletId,
         seed: exportData.seed,
         networkId: exportData.networkId || 'base-sepolia',

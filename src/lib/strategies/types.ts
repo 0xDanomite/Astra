@@ -1,5 +1,6 @@
 export interface Strategy {
   id: string;
+  userId: string;
   type: 'MARKET_CAP' | 'VOLUME' | 'RANDOM';
   status: 'ACTIVE' | 'PAUSED';
   parameters: {

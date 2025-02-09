@@ -6,11 +6,18 @@ import { strategyEmitter } from '@/lib/events/strategyEmitter';
 // export const runtime = 'edge';
 // export const preferredRegion = 'iad1';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = DatabaseService.getInstance();
-    // Only get ACTIVE strategies
-    const activeStrategies = await db.getActiveStrategies();
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
+    // Only get ACTIVE strategies for this user
+    const activeStrategies = await db.getActiveStrategies(userId);
     const now = new Date();
 
     // Ensure only one strategy is processed

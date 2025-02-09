@@ -32,7 +32,7 @@ type ExtendedChatAnthropic = ChatAnthropic & BaseChatModel & {
   disableStreaming: boolean;
 };
 
-export async function initializeAgent() {
+export async function initializeAgent(userId: string) {
   try {
     // Initialize services
     const nillionService = NillionService.getInstance();
@@ -43,8 +43,8 @@ export async function initializeAgent() {
     await db.testRead();
 
     // Get wallet data and active strategies
-    const walletData = await nillionService.getWalletData();
-    const activeStrategies = await db.getActiveStrategies();
+    const walletData = await nillionService.getWalletData(userId);
+    const activeStrategies = await db.getActiveStrategies(userId);
 
     // Configure CDP Wallet Provider
     const config = {
@@ -84,7 +84,7 @@ export async function initializeAgent() {
     // Get tools including strategy creation
     const tools = [
       ...(await getLangChainTools(agentkit)),
-      createStrategyTool(),
+      createStrategyTool(userId),
       listCategoriesTools(),
       getStrategyPerformanceTool(),
       updateStrategyTool(),

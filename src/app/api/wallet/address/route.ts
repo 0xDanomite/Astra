@@ -2,8 +2,15 @@ import { NextResponse } from 'next/server';
 import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { NillionService } from '@/lib/services/nillion';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
     // Initialize CDP SDK
     Coinbase.configure({
       apiKeyName: process.env.CDP_API_KEY_NAME!,
@@ -11,7 +18,7 @@ export async function GET() {
     });
 
     const nillionService = NillionService.getInstance();
-    const walletData = await nillionService.getWalletData();
+    const walletData = await nillionService.getWalletData(userId);
 
     if (!walletData) {
       throw new Error('No wallet data found');

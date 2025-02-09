@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import { NillionService } from '@/lib/services/nillion';
 import { DatabaseService } from '@/lib/services/database';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const { userId } = await request.json();
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
     // Initialize core services
     const nillionService = NillionService.getInstance();
     const db = DatabaseService.getInstance();
@@ -19,7 +24,7 @@ export async function POST() {
     // Initialize Nillion
     try {
       await nillionService.init();
-      const walletData = await nillionService.getWalletData();
+      const walletData = await nillionService.getWalletData(userId);
     } catch (error) {
       console.error('Nillion initialization failed:', error);
       // Continue initialization - Nillion errors shouldn't stop the app

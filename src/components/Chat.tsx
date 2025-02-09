@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -11,6 +12,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { userId } = useAuth();
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +27,7 @@ export default function Chat() {
       const response = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ message: input, userId }),
       });
 
       const data = await response.json();

@@ -15,6 +15,7 @@
     "@langchain/core": "^0.3.19",
     "@langchain/langgraph": "^0.2.21",
     "@langchain/openai": "^0.3.14",
+    "@privy-io/react-auth": "^2.4.2",
     "@pythnetwork/price-service-client": "^1.9.0",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-slot": "^1.1.2",
@@ -41,6 +42,7 @@
     "stream-http": "^3.2.0",
     "tailwind-merge": "^3.0.1",
     "url": "^0.11.4",
+    "use-sync-external-store": "^1.4.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

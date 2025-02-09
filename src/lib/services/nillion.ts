@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Define types for our stored data
 interface WalletData {
+  userId: string;
   walletId: string;
   seed: string;
   networkId: string;
@@ -46,7 +47,7 @@ export class NillionService {
     }
   }
 
-  async getWalletData(): Promise<WalletData | null> {
+  async getWalletData(userId: string): Promise<WalletData | null> {
     try {
       await this.init();
       console.log('🔍 Attempting to read wallet data from Nillion...');
@@ -60,6 +61,7 @@ export class NillionService {
       }
 
       const walletData = {
+        userId: result[0].userId,
         walletId: result[0].walletId,
         seed: result[0].seed,
         networkId: result[0].networkId
@@ -75,16 +77,17 @@ export class NillionService {
     }
   }
 
-  async storeWalletData(walletData: WalletData): Promise<void> {
+  async storeWalletData(data: WalletData): Promise<void> {
     try {
       await this.init();
       console.log('📝 Attempting to store wallet data...');
 
       const record = [{
         _id: this.WALLET_UUID,
-        walletId: { $allot: String(walletData.walletId) },
-        seed: { $allot: String(walletData.seed) },
-        networkId: { $allot: String(walletData.networkId) }
+        userId: { $allot: String(data.userId) },
+        walletId: { $allot: String(data.walletId) },
+        seed: { $allot: String(data.seed) },
+        networkId: { $allot: String(data.networkId) }
       }];
 
       console.log('📦 Data structure being stored:', {

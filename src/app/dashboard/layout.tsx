@@ -1,4 +1,5 @@
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -20,11 +21,5 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
-      <div className="min-h-screen bg-deep-space text-neural-white">
-        {children}
-      </div>
-    </div>
-  );
+  return <ProtectedRoute>{children}</ProtectedRoute>;
 }

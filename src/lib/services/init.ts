@@ -3,12 +3,14 @@ import { DatabaseService } from './database';
 
 let initialized = false;
 
-export async function initializeServices() {
+export async function initializeServices(userId: string) {
   if (initialized) return;
 
   try {
     const response = await fetch('/api/services/init', {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
     });
 
     if (!response.ok) {
@@ -37,7 +39,7 @@ export async function initializeServices() {
     // Initialize Nillion
     try {
       await nillionService.init();
-      const walletData = await nillionService.getWalletData();
+      const walletData = await nillionService.getWalletData(userId);
     } catch (error) {
       console.error('Nillion initialization failed:', error);
       // Continue initialization - Nillion errors shouldn't stop the app

@@ -9,8 +9,11 @@ const conversationHistory: { messages: (HumanMessage | AIMessage)[] } = {
 
 export async function POST(request: Request) {
   try {
-    const { message } = await request.json();
-    const { agent } = await initializeAgent();
+    const { message, userId } = await request.json();
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+    const { agent } = await initializeAgent(userId);
 
     // Add user message to history
     const humanMessage = new HumanMessage({
