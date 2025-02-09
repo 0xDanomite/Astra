@@ -103,6 +103,7 @@ export class DatabaseService {
     const { data, error } = await this.supabase
       .from('strategies')
       .select('*')
+      .eq('status', 'ACTIVE')
       .order('created_at', { ascending: false });
 
     if (error) throw error;

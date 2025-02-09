@@ -9,51 +9,62 @@ export const preferredRegion = 'iad1';
 export async function GET() {
   try {
     const db = DatabaseService.getInstance();
-    const strategies = await db.getAllStrategies();
+    // Only get ACTIVE strategies
+    const activeStrategies = await db.getActiveStrategies();
     const now = new Date();
 
-    console.log(`🔄 Checking ${strategies.length} strategies for rebalancing...`);
-
-    for (const strategy of strategies) {
-      try {
-        const rebalanceTime = strategy.parameters.rebalanceTime;
-        const lastRebalanceDate = strategy.last_updated || strategy.created_at
-          ? new Date(strategy.last_updated || strategy.created_at || '')
-          : new Date();
-        const shouldRebalance = isRebalanceNeeded(lastRebalanceDate, rebalanceTime || '1day', now);
-
-        if (shouldRebalance) {
-          console.log(`⚖️ Rebalancing strategy ${strategy.id}`);
-          const updatedStrategy = await executeStrategy(strategy);
-
-          // Emit update event
-          strategyEmitter.emit('strategyUpdate', {
-            type: 'HOLDINGS_UPDATED',
-            strategyId: strategy.id,
-            holdings: updatedStrategy.holdings,
-            timestamp: new Date().toISOString()
-          });
-        }
-      } catch (error) {
-        console.error(`Failed to process strategy ${strategy.id}:`, error);
-        // Continue with other strategies
-      }
+    // Ensure only one strategy is processed
+    if (activeStrategies.length > 1) {
+      console.warn(`⚠️ Multiple active strategies found (${activeStrategies.length}). Only processing the most recent.`);
     }
 
-    // Emit updates using the shared emitter
+    // Get the most recent active strategy
+    const strategy = activeStrategies[0];
+
+    if (!strategy) {
+      return NextResponse.json({
+        success: true,
+        message: 'No active strategies to process'
+      });
+    }
+
+    try {
+      const rebalanceTime = strategy.parameters.rebalanceTime;
+      const lastRebalanceDate = strategy.last_updated || strategy.created_at
+        ? new Date(strategy.last_updated || strategy.created_at || '')
+        : new Date();
+      const shouldRebalance = isRebalanceNeeded(lastRebalanceDate, rebalanceTime || '1day', now);
+
+      if (shouldRebalance) {
+        console.log(`⚖️ Rebalancing strategy ${strategy.id}`);
+        const updatedStrategy = await executeStrategy(strategy);
+
+        // Emit update event
+        strategyEmitter.emit('strategyUpdate', {
+          type: 'HOLDINGS_UPDATED',
+          strategyId: strategy.id,
+          holdings: updatedStrategy.holdings,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to process strategy ${strategy.id}:`, error);
+    }
+
+    // Emit update
     strategyEmitter.emit('strategyUpdate', {
       type: 'REBALANCE',
-      strategies: strategies.length
+      strategies: 1
     });
 
     return NextResponse.json({
       success: true,
-      message: `Processed ${strategies.length} strategies`
+      message: `Processed active strategy ${strategy.id}`
     });
   } catch (error) {
     console.error('Rebalance cron error:', error);
     return NextResponse.json(
-      { error: 'Failed to process strategies' },
+      { error: 'Failed to process strategy' },
       { status: 500 }
     );
   }
