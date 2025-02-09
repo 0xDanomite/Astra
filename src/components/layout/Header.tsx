@@ -37,20 +37,33 @@ export function Header() {
     >
       <div className="container mx-auto h-full flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <Image
+          {/* <Image
             src="/logo.svg" // We'll need to create this
             alt="ASTRA Logo"
             width={32}
             height={32}
-          />
-          <span className="font-space text-xl font-bold text-cosmic-gradient">
+          /> */}
+          <span
+            className="font-space text-xl font-bold"
+            style={{
+              background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}
+          >
             ASTRA
           </span>
         </div>
 
         {/* Wallet connection will go here */}
         <div className="flex items-center gap-4">
-          <button className="px-4 py-2 rounded-full bg-cosmic-gradient text-neural-white font-space">
+          <button
+            className="px-4 py-2 rounded-full font-space text-neural-white"
+            style={{
+              background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)',
+            }}
+          >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : walletAddress ? (

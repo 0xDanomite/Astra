@@ -108,7 +108,9 @@ export function PerformanceWidget() {
       {/* Main Stats */}
       <div className="p-4 space-y-6">
         {/* PNL Card */}
-        <div className="p-4 rounded-lg bg-cosmic-gradient">
+        <div className="p-4 rounded-lg" style={{
+          background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)'
+        }}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-neural-white/80">Total P&L</span>
             {isPnlPositive ? (

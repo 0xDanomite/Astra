@@ -168,7 +168,9 @@ export function StrategyWidget() {
         )}
 
         {/* Total Value */}
-        <div className="mt-6 p-4 rounded-lg bg-cosmic-gradient">
+        <div className="mt-6 p-4 rounded-lg" style={{
+          background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)'
+        }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-neural-white" />
@@ -180,7 +182,9 @@ export function StrategyWidget() {
           </div>
         </div>
 
-        <div className="mt-6 p-4 rounded-lg bg-cosmic-gradient">
+        <div className="mt-6 p-4 rounded-lg" style={{
+          background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)'
+        }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-neural-white" />

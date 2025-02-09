@@ -1,17 +1,23 @@
 'use client'
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { StrategyScheduler } from '@/lib/strategies/scheduler';
 
 export default function Home() {
   const router = useRouter();
   const [isLaunching, setIsLaunching] = useState(false);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      StrategyScheduler.getInstance().initializeScheduler();
+    }
+  }, []);
+
   const handleLaunch = async () => {
     setIsLaunching(true);
     document.body.classList.add('launching');
 
-    // Wait for initialization
     try {
       const response = await fetch('/api/services/init', { method: 'POST' });
       if (!response.ok) throw new Error('Initialization failed');
@@ -19,10 +25,9 @@ export default function Home() {
       console.error('Initialization error:', error);
     }
 
-    // Give more time for the hyperspace animation
     setTimeout(() => {
       router.push('/dashboard');
-    }, 5000); // Increased to 5 seconds for fuller experience
+    }, 2000);
   };
 
   return (
@@ -30,19 +35,27 @@ export default function Home() {
       <div className={`star-field absolute inset-0 transition-opacity duration-1000 ${isLaunching ? 'launching' : ''}`} />
 
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-8">
-        <h1 className="text-8xl font-bold mb-8 text-center">
-          <span className="animate-gradient-xy inline-block bg-gradient-to-r from-cosmic-pink via-[#ECBFBF] to-stellar-blue text-transparent bg-clip-text font-space">
+        <div className="text-center">
+          <h1
+            className="inline-block text-9xl font-bold font-space"
+            style={{
+              background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}
+          >
             ASTRA
-          </span>
-          <span className="block text-xl mt-4 text-stellar-blue/80 font-space">
+          </h1>
+          <p className="text-2xl mt-4 text-stellar-blue/80 font-space">
             Autonomous Strategy Trading & Rebalancing Assistant
-          </span>
-        </h1>
+          </p>
+        </div>
 
         {!isLaunching ? (
           <button
             onClick={handleLaunch}
-            className="launch-button px-8 py-4 text-xl font-bold rounded-full
+            className="mt-12 launch-button px-8 py-4 text-xl font-bold rounded-full
                      bg-cosmic-gradient hover:bg-cosmic-gradient/90
                      transform hover:scale-105 transition-all duration-300
                      text-neural-white font-space
@@ -52,10 +65,16 @@ export default function Home() {
             Initiate Launch Sequence
           </button>
         ) : (
-          <div className="launch-sequence">
-            <div className="text-6xl font-bold text-center animate-pulse
-                          bg-gradient-to-r from-cosmic-pink via-[#ECBFBF] to-stellar-blue
-                          text-transparent bg-clip-text font-space">
+          <div className="launch-sequence mt-12">
+            <div
+              className="text-6xl font-bold text-center animate-pulse font-space"
+              style={{
+                background: 'linear-gradient(to right, #0EA5E9, #8B5CF6)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}
+            >
               Launching Control Systems
               <span className="loading-dots">...</span>
             </div>
