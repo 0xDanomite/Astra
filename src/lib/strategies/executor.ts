@@ -15,14 +15,7 @@ function selectTokens(tokens: TokenData[], count: number, strategy: TokenSelecti
     (strategy !== 'VOLUME' || token.total_volume !== undefined)
   );
 
-  console.log(`Valid tokens for ${strategy} strategy:`,
-    validTokens.map(t => ({
-      symbol: t.symbol,
-      address: t.address,
-      market_cap: t.market_cap,
-      volume: t.total_volume
-    }))
-  );
+  console.log(`Processing ${validTokens.length} valid tokens for ${strategy} strategy`);
 
   switch (strategy) {
     case 'RANDOM':

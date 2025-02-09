@@ -39,13 +39,7 @@ export async function POST(request: Request) {
         25
       );
 
-      console.log(`Found ${baseTokens.length} tokens on Base with data:`,
-        baseTokens.map(t => ({
-          symbol: t.symbol,
-          market_cap: t.market_cap,
-          volume: t.total_volume
-        }))
-      );
+      console.log(`Found ${baseTokens.length} tokens for strategy execution`);
 
       const selectedTokens = selectTokens(
         baseTokens,
