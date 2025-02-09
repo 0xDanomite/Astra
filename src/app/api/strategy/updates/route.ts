@@ -1,8 +1,9 @@
 import { strategyEmitter } from '@/lib/events/strategyEmitter';
 
-export const runtime = 'edge';
+// Remove edge runtime
+// export const runtime = 'edge';
 
-export async function GET() {
+export async function GET(request: Request) {
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

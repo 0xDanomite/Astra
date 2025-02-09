@@ -3,8 +3,8 @@ import { DatabaseService } from '@/lib/services/database';
 import { executeStrategy } from '@/lib/strategies/executor';
 import { strategyEmitter } from '@/lib/events/strategyEmitter';
 
-export const runtime = 'edge';
-export const preferredRegion = 'iad1';
+// export const runtime = 'edge';
+// export const preferredRegion = 'iad1';
 
 export async function GET() {
   try {

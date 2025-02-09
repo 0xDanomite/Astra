@@ -4,5 +4,10 @@
       "path": "/api/cron/rebalance",
       "schedule": "*/15 * * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/cron/rebalance/route.ts": {
+      "runtime": "nodejs18.x"
+    }
+  }
 }
