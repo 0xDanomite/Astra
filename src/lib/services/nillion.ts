@@ -52,7 +52,7 @@ export class NillionService {
       console.log('🔍 Attempting to read wallet data from Nillion...');
 
       const result = await this.vault.readFromNodes({ _id: this.WALLET_UUID });
-      console.log('📥 Raw Nillion response:', JSON.stringify(result, null, 2));
+      console.log('📥 Raw Nillion wallet response:', result.walletId);
 
       if (!result?.length) {
         console.log('❌ No wallet data found in Nillion');

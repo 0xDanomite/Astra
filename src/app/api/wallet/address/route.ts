@@ -26,7 +26,9 @@ export async function GET() {
     const address = await wallet.getDefaultAddress();
 
     return NextResponse.json({
-      address: address.toString(),
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+      address: address.model.address_id,
       network: walletData.networkId || 'base-sepolia'
     });
   } catch (error) {
