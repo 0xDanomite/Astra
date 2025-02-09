@@ -1,9 +1,7 @@
 import { Strategy, TokenData } from './types';
 import { coingeckoService } from '../services/coingecko';
-import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
-import * as fs from 'fs';
-import { CdpWalletProvider } from '@coinbase/coinbase-sdk';
-import { initializeWallet } from "@/lib/wallet";
+import { DatabaseService } from '../services/database';
+import { StrategyScheduler } from './scheduler';
 
 const WALLET_DATA_FILE = "wallet_data.txt";
 
@@ -69,170 +67,51 @@ async function rebalance(strategy: Strategy, currentHoldings: TokenData[]) {
 }
 
 export async function executeStrategy(strategy: Strategy) {
+  const scheduler = StrategyScheduler.getInstance();
+  const db = DatabaseService.getInstance();
+
   try {
-    let wallet = await initializeWallet();
-    const isInitialSetup = !strategy.currentHoldings || strategy.currentHoldings.length === 0;
-
-    if (isInitialSetup) {
-      const baseTokens = await coingeckoService.getTopTokensByCategory(
-        strategy.parameters.category!,
-        25
-      );
-
-      console.log(`Found ${baseTokens.length} tokens on Base with data:`,
-        baseTokens.map(t => ({
-          symbol: t.symbol,
-          market_cap: t.market_cap,
-          volume: t.total_volume
-        }))
-      );
-
-      console.log('TYPE', strategy.type);
-      const selectedTokens = selectTokens(
-        baseTokens,
-        strategy.parameters.tokenCount,
-        strategy.type as TokenSelectionStrategy
-      );
-
-      console.log('Selected tokens for trading:',
-        selectedTokens.map(t =>
-          `${t.symbol} (${t.address}) - MC: ${t.market_cap}, Vol: ${t.total_volume}`
-        )
-      );
-
-      const perTokenAllocation = strategy.parameters.totalAllocation / strategy.parameters.tokenCount;
-
-      const trades = await Promise.all(selectedTokens.map(async (token) => {
-        try {
-          console.log(`Initial allocation: ${perTokenAllocation} USDC -> ${token.symbol} (${token.address})`);
-          const trade = await wallet.createTrade({
-            amount: perTokenAllocation,
-            fromAssetId: Coinbase.assets.Usdc,
-            toAssetId: token.address,
-            gasless: true
-          });
-          await trade.wait();
-          return { token, status: 'SUCCESS' };
-        } catch (error) {
-          console.error(`Trade failed for ${token.symbol} (${token.address}):`, error);
-          return { token, status: 'FAILED', error };
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/strategy/execute-trades`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        strategy: {
+          ...strategy,
+          // Pass through the date strings
+          created_at: strategy.created_at || new Date().toISOString(),
+          last_updated: strategy.last_updated || new Date().toISOString()
         }
-      }));
+      })
+    });
 
-      strategy.currentHoldings = trades
-        .filter(t => t.status === 'SUCCESS')
-        .map(t => t.token);
-
-      console.log('Stored holdings:', strategy.currentHoldings);
-    } else {
-      // Rebalancing with optimization
-      const baseTokens = await coingeckoService.getTopTokensByCategory(
-        strategy.parameters.category!,
-        25
-      );
-
-      // Select new tokens using strategy
-      const newSelectedTokens = selectTokens(
-        baseTokens,
-        strategy.parameters.tokenCount,
-        strategy.type as TokenSelectionStrategy
-      );
-
-      // Compare current holdings with new selection
-      const tokensToSell = strategy.currentHoldings.filter(
-        currentToken => !newSelectedTokens.find(
-          newToken => newToken.address === currentToken.address
-        )
-      );
-
-      const tokensToBuy = newSelectedTokens.filter(
-        newToken => !strategy.currentHoldings.find(
-          currentToken => currentToken.address === newToken.address
-        )
-      );
-
-      console.log('Rebalance analysis:', {
-        currentHoldings: strategy.currentHoldings.map(t => t.symbol),
-        newSelection: newSelectedTokens.map(t => t.symbol),
-        toSell: tokensToSell.map(t => t.symbol),
-        toBuy: tokensToBuy.map(t => t.symbol)
-      });
-
-      if (tokensToSell.length === 0 && tokensToBuy.length === 0) {
-        console.log('No rebalancing needed - current holdings match optimal selection');
-        return {
-          success: true,
-          holdings: strategy.currentHoldings,
-          message: 'Holdings already optimal'
-        };
-      }
-
-      // Sell only tokens that aren't in new selection
-      wallet = await initializeWallet();
-      for (const token of tokensToSell) {
-        try {
-          const balance = await wallet.getBalance(token.address);
-          console.log(`Balance for ${token.symbol} (${token.address}): ${balance}`);
-
-          if (balance > 0) {
-            const sellAmount = balance * 0.99;
-            console.log(`Selling ${sellAmount} of ${token.symbol}`);
-
-            wallet = await initializeWallet();
-            const trade = await wallet.createTrade({
-              amount: sellAmount,
-              fromAssetId: token.address,
-              toAssetId: Coinbase.assets.Usdc,
-              gasless: true,
-              slippageTolerance: 0.02
-            });
-            await trade.wait();
-          }
-        } catch (error) {
-          console.error(`Failed to sell ${token.symbol}:`, error);
-        }
-      }
-
-      // Remove sold tokens from holdings
-      strategy.currentHoldings = strategy.currentHoldings.filter(
-        token => !tokensToSell.find(t => t.address === token.address)
-      );
-
-      // Buy only new tokens
-      if (tokensToBuy.length > 0) {
-        const usdcBalance = await wallet.getBalance(Coinbase.assets.Usdc);
-        if (usdcBalance > 0) {
-          const perTokenAllocation = usdcBalance / tokensToBuy.length;
-
-          for (const token of tokensToBuy) {
-            try {
-              console.log(`Buying ${token.symbol} with ${perTokenAllocation} USDC`);
-              const trade = await wallet.createTrade({
-                amount: perTokenAllocation,
-                fromAssetId: Coinbase.assets.Usdc,
-                toAssetId: token.address,
-                gasless: true,
-                slippageTolerance: 0.02
-              });
-              await trade.wait();
-              strategy.currentHoldings.push(token);
-            } catch (error) {
-              console.error(`Failed to buy ${token.symbol}:`, error);
-            }
-          }
-        }
-      }
+    if (!response.ok) {
+      throw new Error('Failed to execute trades');
     }
 
-    strategy.lastRebalance = new Date();
+    const result = await response.json();
+
+    // Add safety check for holdings
+    const holdings = result?.holdings || strategy.current_holdings || [];
+
+    // Update strategy in database with ISO string dates
+    await db.storeStrategy({
+      ...strategy,
+      current_holdings: holdings,
+      last_updated: new Date().toISOString(),
+      created_at: strategy.created_at || new Date().toISOString()
+    });
+
     return {
       success: true,
-      holdings: strategy.currentHoldings,
-      message: 'Rebalancing completed'
+      holdings,
+      message: 'Strategy executed successfully'
     };
   } catch (error) {
-    console.error('Strategy execution error:', error);
-    return { success: false, error: error.message };
+    console.error('Strategy execution failed:', error);
+    throw error;
   }
 }
 
@@ -252,66 +131,9 @@ async function calculateRebalancingNeeds(
   return { tokensToSell, tokensToBuy };
 }
 
-async function initializeWallet() {
-  Coinbase.configure({
-    apiKeyName: process.env.CDP_API_KEY_NAME!,
-    privateKey: process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n")
-  });
-
-  const walletData = JSON.parse(fs.readFileSync(WALLET_DATA_FILE, 'utf8'));
-  const wallet = await Wallet.import({
-    walletId: walletData.walletId,
-    seed: walletData.seed,
-    networkId: walletData.networkId || 'base-sepolia'
-  });
-
-  return wallet;
+// Helper function to convert USDC amounts properly
+function formatUSDCAmount(amount: number): bigint {
+  // Convert to smallest unit (6 decimals for USDC)
+  return BigInt(Math.floor(amount * 1_000_000));
 }
 
-async function executeTokenSells(wallet: Wallet, tokensToSell: TokenData[], totalAllocation: number) {
-  // Guard against undefined or empty tokensToSell array
-  if (!tokensToSell || tokensToSell.length === 0) {
-    console.log('No tokens to sell during rebalance');
-    return [];
-  }
-
-  const perTokenAllocation = totalAllocation / tokensToSell.length;
-
-  const results = [];
-  for (const token of tokensToSell) {
-    try {
-      console.log(`Selling ${token.symbol} for USDC`);
-      const trade = await wallet.createTrade({
-        amount: perTokenAllocation,
-        fromAssetId: token.symbol,
-        toAssetId: Coinbase.assets.Usdc,
-        gasless: true
-      });
-      await trade.wait();
-      results.push({ token, status: 'SUCCESS' });
-    } catch (error) {
-      console.error(`Failed to sell ${token.symbol}:`, error);
-      results.push({ token, status: 'FAILED', error });
-    }
-  }
-  return results;
-}
-
-async function executeTokenBuys(wallet: Wallet, tokensToBuy: TokenData[], totalAllocation: number) {
-  const perTokenAllocation = totalAllocation / tokensToBuy.length;
-
-  for (const token of tokensToBuy) {
-    try {
-      console.log(`Rebalance buy: ${perTokenAllocation} USDC -> ${token.symbol}`);
-      const trade = await wallet.createTrade({
-        amount: perTokenAllocation,
-        fromAssetId: Coinbase.assets.Usdc,
-        toAssetId: token.symbol,
-        gasless: true
-      });
-      await trade.wait();
-    } catch (error) {
-      console.error(`Failed to buy ${token.symbol}:`, error);
-    }
-  }
-}

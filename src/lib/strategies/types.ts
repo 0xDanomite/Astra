@@ -1,30 +1,25 @@
 export interface Strategy {
   id: string;
-  name: string;
-  type: 'MARKET_CAP' | 'VOLUME' | 'CUSTOM';
-  owner: {
-    address: string;    // Creator's wallet address
-    createdAt: Date;
-  };
+  type: 'MARKET_CAP' | 'VOLUME' | 'RANDOM';
+  status: 'ACTIVE' | 'PAUSED';
   parameters: {
     category?: string;
-    rebalanceTime?: string; // "17:00"
-    timeZone?: string;     // User's timezone
+    rebalanceTime?: string | null;
     tokenCount: number;
-    totalAllocation: number; // Total USDC to invest
+    totalAllocation: number;
+    walletAddress?: string;
   };
-  agentWallet: {
-    address: string;    // Agent's CDP wallet address
-    createdAt: Date;
-  };
-  currentHoldings: TokenData[];
-  lastRebalance: Date;
+  current_holdings: TokenData[];
+  created_at?: string;
+  last_updated?: string;
 }
 
 export interface TokenData {
+  id?: string;
   symbol: string;
-  name: string;
-  marketCap?: number;
-  platforms?: Record<string, string>;
-  address?: string;
+  address: string;
+  market_cap?: number;
+  total_volume?: number;
+  value?: number;
+  amount?: number;
 }

@@ -14,11 +14,16 @@ import { MemorySaver } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import * as fs from 'fs';
 import { createStrategyTool } from "@/lib/agent/tools/createStrategy";
 import { BufferMemory } from "langchain/memory";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { ChatMessageHistory } from "langchain/memory";
+import { NillionService } from '../services/nillion';
+import { DatabaseService } from '../services/database';
+import { listCategoriesTools } from "@/lib/agent/tools/listCategories";
+import { getStrategyPerformanceTool } from "@/lib/agent/tools/getStrategyPerformance";
+import { updateStrategyTool } from "@/lib/agent/tools/updateStrategy";
+import { manageStrategyStatusTool } from "@/lib/agent/tools/manageStrategyStatus";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
 
@@ -29,38 +34,41 @@ type ExtendedChatAnthropic = ChatAnthropic & BaseChatModel & {
 
 export async function initializeAgent() {
   try {
-    let walletDataStr: string | null = null;
+    // Initialize services
+    const nillionService = NillionService.getInstance();
+    const db = DatabaseService.getInstance();
+    await nillionService.init();
 
-    // Read existing wallet data if available
-    if (fs.existsSync(WALLET_DATA_FILE)) {
-      try {
-        walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
-      } catch (error) {
-        console.error("Error reading wallet data:", error);
-      }
-    }
-    // Initialize LLM with Anthropic
-    const llm = new ChatAnthropic({
-      modelName: "claude-3-5-sonnet-20241022",
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-      temperature: 0.7,
-      streaming: true
-    }) as ExtendedChatAnthropic;
+    // Test database connection
+    await db.testRead();
+
+    // Get wallet data and active strategies
+    const walletData = await nillionService.getWalletData();
+    const activeStrategies = await db.getActiveStrategies();
 
     // Configure CDP Wallet Provider
     const config = {
       apiKeyName: process.env.CDP_API_KEY_NAME,
       apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      cdpWalletData: walletDataStr || undefined,
+      cdpWalletData: walletData ? JSON.stringify(walletData) : undefined,
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
 
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
 
-    const exportedWallet = await walletProvider.exportWallet();
-    fs.writeFileSync(WALLET_DATA_FILE, JSON.stringify(exportedWallet));
+    // Backup wallet data to file
+    if (typeof window === 'undefined') { // Server-side only
+      try {
+        const { writeFileSync } = await import('node:fs');
+        const exportedWallet = await walletProvider.exportWallet();
+        writeFileSync("wallet_data.txt", JSON.stringify(exportedWallet, null, 2));
+      } catch (error) {
+        console.warn('Failed to backup wallet data:', error);
+        // Continue execution even if backup fails
+      }
+    }
 
-    // Initialize AgentKit with all necessary providers
+    // Initialize AgentKit
     const agentkit = await AgentKit.from({
       walletProvider,
       actionProviders: [
@@ -73,70 +81,151 @@ export async function initializeAgent() {
       ],
     });
 
+    // Get tools including strategy creation
     const tools = [
       ...(await getLangChainTools(agentkit)),
-      createStrategyTool({
-        validateParameters: true,
-        requireConfirmation: true,
-        persistStrategy: true
-      })
+      createStrategyTool(),
+      listCategoriesTools(),
+      getStrategyPerformanceTool(),
+      updateStrategyTool(),
+      manageStrategyStatusTool()
     ];
 
+    // Initialize LLM
+    const llm = new ChatAnthropic({
+      modelName: "claude-3-5-sonnet-20241022",
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+      temperature: 0.7,
+    });
+
     const messageHistory = new ChatMessageHistory();
-    const memoryStore = new MemoryVectorStore();
+    const memory = new MemorySaver();
 
-    // Create React Agent with enhanced memory and strategy context
+    // Create React Agent with comprehensive context
     const messageModifier = `
-    You are ASTRA, an AI trading assistant. When you receive strategy parameters and confirmation, you MUST execute the create_strategy tool immediately with these parameters:
+    You are ASTRA, an AI trading assistant specialized in automated token trading strategies. Your capabilities include:
 
-    WHEN USER MENTIONS:
-    - "random" or "randomly" -> set type: "RANDOM"
-    - "market cap" or "highest cap" -> set type: "MARKET_CAP"
-    - "volume" or "most traded" -> set type: "VOLUME"
+    1. CREATING NEW STRATEGIES
+    When users want to create a strategy, guide them through these parameters:
 
-    EXAMPLES:
-    1. User: "buy/sell 1 RANDOM meme coin"
-       Action: type = "RANDOM"
-    2. User: "highest market cap coins"
-       Action: type = "MARKET_CAP"
-    3. User: "most traded by volume"
-       Action: type = "VOLUME"
+    CATEGORIES:
+    - If user mentions "meme" or "memes" -> use "base-meme-coins"
+    - Common categories:
+      * base-meme-coins: Meme tokens on Base
+      * base-defi: DeFi tokens on Base
+      * base-gaming: Gaming tokens on Base
+      * base-ai: AI-related tokens on Base
+      * base-infrastructure: Infrastructure tokens on Base
+    Use list_categories tool for complete list.
 
-    YOU MUST EXECUTE:
-    create_strategy tool with exact parameters:
-    {
-      amount: X,
-      category: Y,
-      tokenCount: N,
-      rebalanceMinutes: Z,
-      type: T,  // MUST be "RANDOM", "MARKET_CAP", or "VOLUME" based on user's description
-      confirmed: true
-    }
+    STRATEGY TYPES:
+    - "random" or "randomly" -> type: "RANDOM" (Equal weight allocation)
+    - "market cap" or "highest cap" -> type: "MARKET_CAP" (Weight by market cap)
+    - "volume" or "most traded" -> type: "VOLUME" (Weight by trading volume)
 
-    Example:
-    User: "Create a strategy with 100 USDC, base-meme-coins category, 3 tokens, rebalance every 60 minutes, random selection"
-    Action: Execute create_strategy with {amount: 100, category: "base-meme-coins", tokenCount: 3, rebalanceMinutes: 60, type: "RANDOM", confirmed: true}
+    PARAMETERS GUIDE:
+    - amount: Minimum 10 USDC
+    - tokenCount: 1-10 tokens
+    - rebalanceMinutes: Suggested 60, 120, 240, or 1440 (daily)
 
-    DO NOT ask for parameters again after receiving them. DO NOT ask for confirmation after receiving "yes" or "confirm". EXECUTE IMMEDIATELY.
+    EXAMPLE CONVERSATIONS:
+    User: "I want to invest in meme coins"
+    Response: "I'll help create a meme coin strategy. How much USDC would you like to invest? I recommend starting with at least 50 USDC for diversification."
+
+    User: "What categories are available?"
+    Response: "Here are some popular categories on Base:
+    1. base-meme-coins (Meme tokens)
+    2. base-defi (DeFi protocols)
+    3. base-gaming (Gaming tokens)
+    4. base-ai (AI projects)
+    5. base-infrastructure (Infrastructure tokens)
+    Let me fetch the complete list for you using the list_categories tool."
+
+    2. MANAGING EXISTING STRATEGIES
+    Current Active Strategies:
+    ${activeStrategies.length > 0 ?
+      activeStrategies.map(strategy => `
+      - Strategy ID: ${strategy.id}
+        Type: ${strategy.type}
+        Category: ${strategy.parameters.category}
+        Allocation: ${strategy.parameters.totalAllocation} USDC
+        Tokens: ${strategy.parameters.tokenCount}
+        Current Holdings: ${JSON.stringify(strategy.current_holdings)}
+        Last Updated: ${strategy.last_updated}
+      `).join('\n')
+      : 'No active strategies. Ready to create one!'}
+
+    For existing strategies, you can:
+    - Show performance metrics using get_strategy_performance
+    - Explain current holdings and allocation
+    - Suggest optimizations based on market conditions
+    - Help modify parameters if needed
+
+    Network: ${config.networkId}
+
+
+    Remember:
+    1. Always validate parameters before execution
+    2. Require explicit confirmation before creating strategies
+    3. Provide clear feedback on actions taken
+    4. Use tools to fetch real-time data when needed
+
+    3. MANAGING STRATEGY STATUS
+    You can manage existing strategies with these actions:
+
+    UPDATE PARAMETERS:
+    - Modify token count (1-10)
+    - Adjust total allocation (min 10 USDC)
+    - Change rebalance interval
+    - Switch category
+
+    PAUSE/RESUME:
+    - Pause strategy (maintains holdings but stops rebalancing)
+    - Resume strategy (restarts rebalancing with existing parameters)
+
+    EXAMPLE MANAGEMENT:
+    User: "Pause strategy abc-123"
+    Action: Execute manage_strategy_status with {strategyId: "abc-123", action: "PAUSE"}
+
+    User: "Update strategy xyz-789 to use 5 tokens"
+    Action: Execute update_strategy with {strategyId: "xyz-789", updates: {tokenCount: 5}}
+
+    User: "Resume my paused strategy"
+    Response: First show paused strategies, then confirm which to resume
+
+    Current Strategy Statuses:
+    ${activeStrategies.map(s => `
+    - ${s.id}: ${s.status}
+      Type: ${s.type}
+      Allocation: ${s.parameters.totalAllocation} USDC
+      Last Updated: ${s.last_updated}
+    `).join('\n')}
     `;
 
     const agent = createReactAgent({
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
       llm,
       tools,
       messageModifier,
-      config: {
-        memory: messageHistory,
-        memoryStore,
-        rememberConversation: true,
-        contextWindow: 4096,
-        maxIterations: 10,
-        returnIntermediateSteps: true,
-      }
+      checkpointSaver: memory
     });
 
-    return { agent, agentkit, tools };
+    return {
+      agent,
+      agentkit,
+      config: {
+        configurable: {
+          thread_id: `CDP AgentKit - ${walletData?.walletId}`,
+          context: {
+            activeStrategies: activeStrategies.map(s => s.id),
+            // walletAddress: await agentkit.walletProvider.getAddress()
+          }
+        }
+      }
+    };
   } catch (error) {
-    console.error("Failed to initialize agent:", error);
+    console.error('Failed to initialize agent:', error);
     throw error;
   }
 }

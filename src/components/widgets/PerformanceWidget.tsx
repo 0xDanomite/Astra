@@ -1,7 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, Activity, Timer, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Timer, Zap, Network } from 'lucide-react';
 
 interface PerformanceMetrics {
   totalValue: number;
@@ -9,21 +10,87 @@ interface PerformanceMetrics {
   pnlPercentage: number;
   systemUptime: number;
   successRate: number;
-  lastUpdate: Date;
+  lastUpdate: string;
 }
 
-// Mock data - will replace with real data later
-const mockMetrics: PerformanceMetrics = {
-  totalValue: 1000,
-  pnl: 150,
-  pnlPercentage: 15,
-  systemUptime: 99.9,
-  successRate: 98.5,
-  lastUpdate: new Date(),
+interface WalletInfo {
+  address: string;
+  network: string;
+}
+
+// Example date formatting
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short'
+  });
 };
 
 export function PerformanceWidget() {
-  const isPnlPositive = mockMetrics.pnl >= 0;
+  const [metrics, setMetrics] = useState<PerformanceMetrics>({
+    totalValue: 0,
+    pnl: 0,
+    pnlPercentage: 0,
+    systemUptime: 100,
+    successRate: 100,
+    lastUpdate: new Date().toISOString()
+  });
+
+  const [networkInfo, setNetworkInfo] = useState<string>('Loading...');
+
+  useEffect(() => {
+    // Fetch wallet info for network
+    async function fetchWalletInfo() {
+      try {
+        const response = await fetch('/api/wallet/address');
+        if (response.ok) {
+          const data: WalletInfo = await response.json();
+          setNetworkInfo(data.network);
+        }
+      } catch (error) {
+        console.error('Failed to fetch wallet info:', error);
+        setNetworkInfo('Network Error');
+      }
+    }
+
+    // Fetch performance metrics
+    async function fetchPerformanceData() {
+      try {
+        const response = await fetch('/api/strategy/performance');
+        if (response.ok) {
+          const data = await response.json();
+          setMetrics({
+            ...data,
+            lastUpdate: new Date(data.lastUpdate).toISOString()
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch performance data:', error);
+      }
+    }
+
+    // Initial fetches
+    fetchWalletInfo();
+    fetchPerformanceData();
+
+    // Subscribe to updates
+    const eventSource = new EventSource('/api/strategy/updates');
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'HOLDINGS_UPDATED') {
+        fetchPerformanceData();
+      }
+    };
+
+    return () => eventSource.close();
+  }, []);
+
+  const isPnlPositive = metrics.pnl >= 0;
 
   return (
     <motion.div
@@ -52,16 +119,27 @@ export function PerformanceWidget() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-space text-2xl font-bold text-neural-white">
-              ${Math.abs(mockMetrics.pnl).toFixed(2)}
+              ${Math.abs(metrics.pnl).toFixed(2)}
             </span>
             <span className={`text-sm ${isPnlPositive ? 'text-green-400' : 'text-red-400'}`}>
-              {isPnlPositive ? '+' : '-'}{mockMetrics.pnlPercentage}%
+              {isPnlPositive ? '+' : '-'}{metrics.pnlPercentage}%
             </span>
           </div>
         </div>
 
         {/* System Metrics */}
         <div className="space-y-4">
+          {/* Network Info */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-stellar-blue/10">
+            <div className="flex items-center gap-2">
+              <Network className="w-4 h-4 text-stellar-blue" />
+              <span className="text-neural-white/70">Network</span>
+            </div>
+            <span className="font-mono text-neural-white">
+              {networkInfo}
+            </span>
+          </div>
+
           {/* Uptime */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-stellar-blue/10">
             <div className="flex items-center gap-2">
@@ -69,7 +147,7 @@ export function PerformanceWidget() {
               <span className="text-neural-white/70">System Uptime</span>
             </div>
             <span className="font-mono text-neural-white">
-              {mockMetrics.systemUptime}%
+              {metrics.systemUptime}%
             </span>
           </div>
 
@@ -80,7 +158,7 @@ export function PerformanceWidget() {
               <span className="text-neural-white/70">Success Rate</span>
             </div>
             <span className="font-mono text-neural-white">
-              {mockMetrics.successRate}%
+              {metrics.successRate}%
             </span>
           </div>
 
@@ -91,7 +169,7 @@ export function PerformanceWidget() {
               <span className="text-neural-white/70">Last Update</span>
             </div>
             <span className="font-mono text-neural-white">
-              {mockMetrics.lastUpdate.toLocaleTimeString()}
+              {metrics.lastUpdate ? formatDate(metrics.lastUpdate) : 'Never'}
             </span>
           </div>
         </div>

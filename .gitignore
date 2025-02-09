@@ -42,3 +42,8 @@ next-env.d.ts
 
 # Wallet data
 **/wallet_data.txt
+# Wallet data backups
+**/wallet_data*.bak
+**/wallet_data*.backup
+**/wallet_data.txt.*
+

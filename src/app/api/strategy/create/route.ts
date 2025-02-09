@@ -3,15 +3,16 @@ import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { Strategy } from '@/lib/strategies/types';
 import { StrategyScheduler } from '@/lib/strategies/scheduler';
 import { executeStrategy } from '@/lib/strategies/executor';
-import * as fs from 'fs';
 import { initializeAgent } from '@/lib/agent/chatbot';
-
-const WALLET_DATA_FILE = "wallet_data.txt";
+import { NillionService } from '@/lib/services/nillion';
+import { DatabaseService } from '@/lib/services/database';
 
 export async function POST(request: Request) {
   try {
     const { parameters } = await request.json();
     const { agentkit } = await initializeAgent();
+    const nillionService = NillionService.getInstance();
+    const db = DatabaseService.getInstance();
 
     // Initialize CDP SDK
     Coinbase.configure({
@@ -19,11 +20,11 @@ export async function POST(request: Request) {
       privateKey: process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n")
     });
 
-    // Load existing wallet data
+    // Get wallet data from Nillion
+    const walletData = await nillionService.getWalletData();
     let wallet;
-    if (fs.existsSync(WALLET_DATA_FILE)) {
-      const walletData = JSON.parse(fs.readFileSync(WALLET_DATA_FILE, 'utf8'));
 
+    if (walletData) {
       // Import wallet using the saved data
       wallet = await Wallet.import({
         walletId: walletData.walletId,
@@ -34,51 +35,42 @@ export async function POST(request: Request) {
       // Create new wallet if no data exists
       wallet = await Wallet.create();
       const exportData = wallet.export();
-      fs.writeFileSync(WALLET_DATA_FILE, JSON.stringify(exportData));
+      await nillionService.storeWalletData({
+        walletId: exportData.walletId,
+        seed: exportData.seed,
+        networkId: exportData.networkId || 'base-sepolia',
+      });
     }
 
     // Get wallet address
     const address = await wallet.getDefaultAddress();
     const addressString = address.model.address_id;
 
+    // Create and store strategy
     const strategy: Strategy = {
-      id: crypto.randomUUID(),
-      name: parameters.name || 'Meme Token Strategy',
-      type: parameters.type || 'MARKET_CAP',
-      owner: {
-        address: addressString,
-        createdAt: new Date()
-      },
+      id: `strategy-${Date.now()}`,
+      type: parameters.type,
+      status: 'ACTIVE',
       parameters: {
-        category: parameters.category,
-        rebalanceTime: parameters.rebalanceTime,
-        tokenCount: parameters.tokenCount,
-        totalAllocation: parameters.totalAllocation
+        ...parameters,
+        walletAddress: addressString
       },
-      agentWallet: {
-        address: addressString,
-        createdAt: new Date()
-      },
-      currentHoldings: [],
-      lastRebalance: new Date()
+      current_holdings: []
     };
 
-    // Execute strategy immediately for initial token purchase
-    await executeStrategy(strategy, agentkit);
+    // Store in Postgres
+    await db.storeStrategy(strategy);
 
-    // Then schedule future rebalances
-    await StrategyScheduler.getInstance().scheduleStrategy(strategy);
+    // Initialize strategy execution
+    const scheduler = StrategyScheduler.getInstance();
+    await scheduler.scheduleStrategy(strategy);
+    await executeStrategy(strategy);
 
-    console.log('Created and scheduled strategy:', strategy);
-
-    return NextResponse.json({
-      success: true,
-      strategy
-    });
+    return NextResponse.json({ success: true, strategy });
   } catch (error) {
-    console.error('Strategy creation error:', error);
+    console.error('Error creating strategy:', error);
     return NextResponse.json(
-      { error: 'Failed to create strategy', details: error.message },
+      { error: 'Failed to create strategy' },
       { status: 500 }
     );
   }

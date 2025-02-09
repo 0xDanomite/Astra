@@ -47,7 +47,7 @@ export function CommandCenter() {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const userMessage = { role: 'user', content: input };
+    const userMessage: Message = { role: 'user' as const, content: input };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);

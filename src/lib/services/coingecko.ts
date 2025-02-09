@@ -31,7 +31,7 @@ export class CoinGeckoService {
     const detailedTokens = await Promise.all(
       baseTokens.map(async (token) => {
         try {
-          const details = await this.fetchTokenDetails(token.id);
+          const details = await this.fetchTokenDetails(token?.id || '');
           return {
             ...token,
             market_cap: details.market_data?.market_cap?.usd,
@@ -95,6 +95,24 @@ export class CoinGeckoService {
       console.error('Failed to fetch categories:', error);
       throw error;
     }
+  }
+
+  async getTokenPrices(symbols: string[]): Promise<Record<string, number>> {
+    const symbolsLower = symbols.map(s => s.toLowerCase());
+    const url = `${this.baseUrl}/simple/price?ids=${symbolsLower.join(',')}&vs_currencies=usd`;
+
+    const response = await fetch(url, {
+      headers: {
+        'accept': 'application/json',
+        'x-cg-demo-api-key': this.apiKey
+      }
+    });
+
+    const data = await response.json();
+    return Object.entries(data).reduce((acc, [id, prices]: [string, any]) => {
+      acc[id] = prices.usd;
+      return acc;
+    }, {} as Record<string, number>);
   }
 }
 

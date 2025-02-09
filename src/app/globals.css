@@ -5,6 +5,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --deep-space: #0a0b1e;
+  --stellar-blue: #5C24FF;
+  --cosmic-pink: #FF3BFF;
+  --neural-white: #ffffff;
+  --neural-gray: #9ca3af;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,4 +23,139 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.stars-container {
+  perspective: 400px;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.stars {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(2px 2px at 20px 30px, #eee, rgba(0, 0, 0, 0)),
+    radial-gradient(2px 2px at 40px 70px, #fff, rgba(0, 0, 0, 0)),
+    radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0, 0, 0, 0)),
+    radial-gradient(2px 2px at 90px 40px, #fff, rgba(0, 0, 0, 0));
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  transform-origin: 50% 0;
+  transform: translateZ(0);
+}
+
+/* Star field animation */
+.star-field {
+  background: black;
+  background-image:
+    radial-gradient(white, rgba(255, 255, 255, .2) 2px, transparent 40px),
+    radial-gradient(white, rgba(255, 255, 255, .15) 1px, transparent 30px),
+    radial-gradient(white, rgba(255, 255, 255, .1) 2px, transparent 40px);
+  background-size: 550px 550px, 350px 350px, 250px 250px;
+  animation: stars 4s linear infinite;
+}
+
+/* Launch animation */
+.launching .star-field {
+  animation: hyperspace-stars 3s ease-in forwards;
+}
+
+.loading-dots {
+  animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes stars {
+  0% {
+    background-position: 0 0, 0 0, 0 0;
+  }
+
+  100% {
+    background-position: 550px 550px, 350px 350px, 250px 250px;
+  }
+}
+
+@keyframes hyperspace-stars {
+  0% {
+    background-position: 0 0, 0 0, 0 0;
+    opacity: 1;
+  }
+
+  100% {
+    background-position: 1650px 1650px, 1050px 1050px, 750px 750px;
+    opacity: 0;
+  }
+}
+
+@keyframes dots {
+
+  0%,
+  20% {
+    content: '.';
+    opacity: 0.2;
+  }
+
+  40% {
+    content: '..';
+    opacity: 0.5;
+  }
+
+  60% {
+    content: '...';
+    opacity: 0.8;
+  }
+
+  80%,
+  100% {
+    content: '';
+    opacity: 1;
+  }
+}
+
+/* Ensure smooth page transitions */
+.page-transition {
+  transition: opacity 0.5s ease-in-out;
+}
+
+@keyframes gradient-xy {
+
+  0%,
+  100% {
+    background-size: 400% 400%;
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-size: 400% 400%;
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-xy {
+  animation: gradient-xy 15s ease infinite;
+  background-size: 400% 400%;
+}
+
+/* Update button hover effects */
+.launch-button:hover {
+  box-shadow: 0 0 30px rgba(255, 59, 255, 0.7),
+    0 0 60px rgba(92, 36, 255, 0.4);
+}
+
+.bg-cosmic-gradient {
+  background: linear-gradient(to right, var(--cosmic-pink), #ECBFBF, var(--stellar-blue));
+}
+
+/* Update header and button gradients */
+.text-cosmic-gradient {
+  background: linear-gradient(to right, var(--cosmic-pink), #ECBFBF, var(--stellar-blue));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.bg-deep-space {
+  background-color: var(--deep-space);
 }

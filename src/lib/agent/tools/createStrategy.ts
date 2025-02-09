@@ -1,13 +1,7 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import { executeStrategy } from "@/lib/strategies/executor";
-import { StrategyScheduler } from "@/lib/strategies/scheduler";
-
-interface StrategyToolConfig {
-  validateParameters?: boolean;
-  requireConfirmation?: boolean;
-  persistStrategy?: boolean;
-}
+import { DatabaseService } from '@/lib/services/database';
+import { Strategy } from '@/lib/strategies/types';
 
 export const createStrategyTool = () => {
   return new DynamicStructuredTool({
@@ -23,7 +17,7 @@ export const createStrategyTool = () => {
     }),
     func: async ({ amount, category, tokenCount, rebalanceMinutes, type, confirmed }) => {
       try {
-        const strategy = {
+        const strategy: Strategy = {
           id: crypto.randomUUID(),
           type,
           parameters: {
@@ -32,15 +26,19 @@ export const createStrategyTool = () => {
             tokenCount,
             rebalanceTime: `${rebalanceMinutes}min`
           },
-          currentHoldings: []
+          current_holdings: [],
+          status: 'ACTIVE' as const,
+          created_at: new Date().toISOString(),
+          last_updated: new Date().toISOString()
         };
 
-        await executeStrategy(strategy);
-        await StrategyScheduler.getInstance().scheduleStrategy(strategy);
+        const db = DatabaseService.getInstance();
+        await db.storeStrategy(strategy);
 
-        return `Strategy created! ID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC\nCategory: ${category}\nRebalance: ${rebalanceMinutes}min`;
+        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC`;
       } catch (error) {
-        return `Failed to create strategy: ${error.message}`;
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Failed to create strategy: ${message}`);
       }
     }
   });
