@@ -2,6 +2,7 @@ import { Strategy, TokenData } from './types';
 import { coingeckoService } from '../services/coingecko';
 import { DatabaseService } from '../services/database';
 import { StrategyScheduler } from './scheduler';
+import { getBaseUrl } from '@/lib/utils/urls';
 
 const WALLET_DATA_FILE = "wallet_data.txt";
 
@@ -64,7 +65,7 @@ export async function executeStrategy(strategy: Strategy) {
   const db = DatabaseService.getInstance();
 
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = getBaseUrl();
     const response = await fetch(`${baseUrl}/api/strategy/execute-trades`, {
       method: 'POST',
       headers: {
