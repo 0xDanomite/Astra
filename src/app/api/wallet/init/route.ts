@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { NillionService } from '@/lib/services/nillion';
-import { writeFileSync } from 'node:fs';
+// import { writeFileSync } from 'node:fs';
 
 export async function POST() {
   try {
@@ -32,7 +32,7 @@ export async function POST() {
       });
 
       // Backup to file system (server-side only)
-      writeFileSync("wallet_data.txt", JSON.stringify(exportData, null, 2));
+      // writeFileSync("wallet_data.txt", JSON.stringify(exportData, null, 2));
     }
 
     return NextResponse.json({

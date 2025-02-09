@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     COINGECKO_API_KEY: process.env.COINGECKO_API_KEY!,
     NILLION_API_KEY: process.env.NILLION_API_KEY!,
     DATABASE_URL: process.env.DATABASE_URL!,
+    NEXT_PUBLIC_APP_URL: process.env.VERCEL_URL || process.env.NEXT_PUBLIC_APP_URL
   },
 };
 

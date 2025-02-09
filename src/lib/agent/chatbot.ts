@@ -57,16 +57,16 @@ export async function initializeAgent() {
     const walletProvider = await CdpWalletProvider.configureWithWallet(config);
 
     // Backup wallet data to file
-    if (typeof window === 'undefined') { // Server-side only
-      try {
-        const { writeFileSync } = await import('node:fs');
-        const exportedWallet = await walletProvider.exportWallet();
-        writeFileSync("wallet_data.txt", JSON.stringify(exportedWallet, null, 2));
-      } catch (error) {
-        console.warn('Failed to backup wallet data:', error);
-        // Continue execution even if backup fails
-      }
-    }
+    // if (typeof window === 'undefined') { // Server-side only
+    //   try {
+    //     const { writeFileSync } = await import('node:fs');
+    //     const exportedWallet = await walletProvider.exportWallet();
+    //     writeFileSync("wallet_data.txt", JSON.stringify(exportedWallet, null, 2));
+    //   } catch (error) {
+    //     console.warn('Failed to backup wallet data:', error);
+    //     // Continue execution even if backup fails
+    //   }
+    // }
 
     // Initialize AgentKit
     const agentkit = await AgentKit.from({
