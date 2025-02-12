@@ -65,10 +65,15 @@ export const createStrategyTool = (userId: string) => {
         await db.storeStrategy(strategy);
         console.log('Strategy stored in database');
 
-        // Call create endpoint
-        const response = await fetch('/api/strategy/create', {
+        // Use getBaseUrl instead of direct env vars
+        const baseUrl = getBaseUrl();
+
+        // Call create endpoint with absolute URL
+        const response = await fetch(`${baseUrl}/api/strategy/create`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             parameters: {
               ...strategy.parameters,

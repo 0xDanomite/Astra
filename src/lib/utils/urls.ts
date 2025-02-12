@@ -4,8 +4,12 @@ export function getBaseUrl() {
     return '';
   }
 
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+
   if (process.env.VERCEL_URL) {
-    // Reference for vercel.com
+    // Fallback for vercel.com
     return `https://${process.env.VERCEL_URL}`;
   }
 
