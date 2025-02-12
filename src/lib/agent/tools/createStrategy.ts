@@ -13,7 +13,17 @@ export const createStrategyTool = (userId: string) => {
       - tokenCount: Number of tokens to hold (1-10)
       - rebalanceMinutes: Rebalance interval in minutes (recommended: 60, 120, 240, or 1440)
       - type: Strategy type ('RANDOM', 'MARKET_CAP', or 'VOLUME')
-      - confirmed: Boolean to confirm creation`,
+      - confirmed: Boolean to confirm creation
+
+      EXAMPLE:
+      {
+        "amount": 20,
+        "category": "base-meme-coins",
+        "tokenCount": 2,
+        "rebalanceMinutes": 60,
+        "type": "RANDOM",
+        "confirmed": true
+      }`,
     schema: z.object({
       amount: z.number().min(10),
       category: z.string(),
@@ -34,7 +44,6 @@ export const createStrategyTool = (userId: string) => {
       try {
         console.log('Creating strategy with parameters:', { amount, category, tokenCount, rebalanceMinutes, type });
 
-        // Create strategy object with shorter timeout
         const strategy: Strategy = {
           id: crypto.randomUUID(),
           userId,
@@ -51,68 +60,33 @@ export const createStrategyTool = (userId: string) => {
           last_updated: new Date().toISOString()
         };
 
-        // Store in database with timeout
-        const dbPromise = new Promise(async (resolve, reject) => {
-          const timeoutId = setTimeout(() => reject(new Error('Database operation timed out')), 5000);
-          try {
-            const db = DatabaseService.getInstance();
-            await db.storeStrategy(strategy);
-            clearTimeout(timeoutId);
-            resolve(true);
-          } catch (error) {
-            clearTimeout(timeoutId);
-            reject(error);
-          }
+        // Store in database
+        const db = DatabaseService.getInstance();
+        await db.storeStrategy(strategy);
+        console.log('Strategy stored in database');
+
+        // Call create endpoint
+        const response = await fetch('/api/strategy/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parameters: {
+              ...strategy.parameters,
+              type: strategy.type
+            },
+            userId
+          })
         });
 
-        try {
-          await dbPromise;
-          console.log('Strategy stored in database');
-        } catch (dbError) {
-          console.error('Database error:', dbError);
-          throw new Error(`Database error: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`API error: ${JSON.stringify(errorData)}`);
         }
 
-        // Call create endpoint with timeout
-        const apiPromise = new Promise(async (resolve, reject) => {
-          const timeoutId = setTimeout(() => reject(new Error('API operation timed out')), 5000);
-          try {
-            const response = await fetch('/api/strategy/create', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                parameters: {
-                  ...strategy.parameters,
-                  type: strategy.type
-                },
-                userId
-              })
-            });
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(`API error: ${JSON.stringify(errorData)}`);
-            }
-            clearTimeout(timeoutId);
-            resolve(true);
-          } catch (error) {
-            clearTimeout(timeoutId);
-            reject(error);
-          }
-        });
-
-        try {
-          await apiPromise;
-          console.log('Strategy creation API call successful');
-        } catch (apiError) {
-          console.error('API call error:', apiError);
-          throw new Error(`API call failed: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
-        }
-
-        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC`;
+        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC\nCategory: ${category}\nToken Count: ${tokenCount}\nRebalance Interval: ${rebalanceMinutes} minutes`;
       } catch (error) {
         console.error('Strategy creation failed:', error);
-        return `Failed to create strategy: ${error instanceof Error ? error.message : String(error)}`;
+        throw new Error(`Failed to create strategy: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   });
