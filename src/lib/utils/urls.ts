@@ -17,7 +17,7 @@ export function getBaseUrl() {
 
   if (appUrl) {
     console.log(`Using NEXT_PUBLIC_APP_URL: ${appUrl}`);
-    return appUrl;
+    return `https://${appUrl}`.replace(/^https:\/\/https:\/\//, 'https://');
   }
 
   if (vercelUrl) {
