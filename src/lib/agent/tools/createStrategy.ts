@@ -33,17 +33,11 @@ export const createStrategyTool = (userId: string) => {
       confirmed: z.boolean()
     }),
     func: async ({ amount, category, tokenCount, rebalanceMinutes, type, confirmed }) => {
-      if (!userId) {
-        throw new Error('User not authenticated');
-      }
-
-      if (!confirmed) {
-        return "Please confirm the strategy creation by setting confirmed to true.";
+      if (!userId || !confirmed) {
+        return "Please confirm the strategy creation.";
       }
 
       try {
-        console.log('Creating strategy with parameters:', { amount, category, tokenCount, rebalanceMinutes, type });
-
         const strategy: Strategy = {
           id: crypto.randomUUID(),
           userId,
@@ -55,15 +49,13 @@ export const createStrategyTool = (userId: string) => {
             rebalanceTime: `${rebalanceMinutes}min`
           },
           current_holdings: [],
-          status: 'ACTIVE' as const,
+          status: 'ACTIVE',
           created_at: new Date().toISOString(),
           last_updated: new Date().toISOString()
         };
 
-        // Store in database
         const db = DatabaseService.getInstance();
         await db.storeStrategy(strategy);
-        console.log('Strategy stored in database');
 
         // Log URL resolution
         const baseUrl = getBaseUrl();
@@ -96,15 +88,10 @@ export const createStrategyTool = (userId: string) => {
           timestamp: new Date().toISOString()
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(`API error: ${JSON.stringify(errorData)}`);
-        }
-
-        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC\nCategory: ${category}\nToken Count: ${tokenCount}\nRebalance Interval: ${rebalanceMinutes} minutes`;
+        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC`;
       } catch (error) {
         console.error('Strategy creation failed:', error);
-        throw new Error(`Failed to create strategy: ${error instanceof Error ? error.message : String(error)}`);
+        return `Failed to create strategy: ${error instanceof Error ? error.message : String(error)}`;
       }
     }
   });
