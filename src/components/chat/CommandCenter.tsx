@@ -23,14 +23,24 @@ export function CommandCenter() {
   const [isLoading, setIsLoading] = useState(false);
   const { userId } = useAuth();
 
-  const sendMessage = async (content: string) => {
+  const sendMessage = async (content: string, messageHistory: Message[]) => {
     try {
       const response = await fetch('/api/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content,  userId  }),
+        body: JSON.stringify({
+          message: content,
+          userId,
+          conversationHistory: messageHistory.map(msg => ({
+            type: msg.role === 'user' ? 'HumanMessage' : 'AIMessage',
+            data: {
+              content: msg.content,
+              additional_kwargs: {}
+            }
+          }))
+        }),
       });
 
       if (!response.ok) {
@@ -49,13 +59,14 @@ export function CommandCenter() {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const userMessage: Message = { role: 'user' as const, content: input };
-    setMessages(prev => [...prev, userMessage]);
+    const userMessage: Message = { role: 'user', content: input };
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await sendMessage(input);
+      const response = await sendMessage(input, updatedMessages);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: response

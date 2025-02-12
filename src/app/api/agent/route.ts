@@ -2,14 +2,9 @@ import { NextResponse } from 'next/server';
 import { initializeAgent } from '@/lib/agent/chatbot';
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 
-// TODO Store conversation history (this should be in a database)
-const conversationHistory: { messages: (HumanMessage | AIMessage)[] } = {
-  messages: []
-};
-
 export async function POST(request: Request) {
   try {
-    const { message, userId } = await request.json();
+    const { message, userId, conversationHistory = [] } = await request.json();
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
@@ -20,10 +15,12 @@ export async function POST(request: Request) {
       content: message,
       additional_kwargs: {}
     });
-    conversationHistory.messages.push(humanMessage);
+
+    // Use provided conversation history plus new message
+    const messages = [...conversationHistory, humanMessage];
 
     const stream = await agent.stream(
-      { messages: conversationHistory.messages },
+      { messages },
       { configurable: { thread_id: "ASTRA-Agent" } }
     );
 
@@ -36,14 +33,17 @@ export async function POST(request: Request) {
       }
     }
 
-    // Add AI response to history
+    // Create AI message from response
     const aiMessage = new AIMessage({
       content: chunks.join('\n'),
       additional_kwargs: {}
     });
-    conversationHistory.messages.push(aiMessage);
 
-    return NextResponse.json({ response: chunks.join('\n') });
+    // Return both the response and the updated conversation history
+    return NextResponse.json({
+      response: chunks.join('\n'),
+      messages: [...messages, aiMessage]
+    });
   } catch (error) {
     console.error('Agent error:', error);
     return NextResponse.json(
