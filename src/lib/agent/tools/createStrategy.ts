@@ -53,15 +53,14 @@ export const createStrategyTool = (userId: string) => {
 
         // Call create endpoint
         try {
-          const baseUrl = typeof window !== 'undefined'
-            ? window.location.origin
-            : `https://${process.env.VERCEL_URL || 'localhost:3000'}`;
-
-          const response = await fetch(`${baseUrl}/api/strategy/create`, {
+          const response = await fetch('/api/strategy/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              parameters: strategy.parameters,
+              parameters: {
+                ...strategy.parameters,
+                type: strategy.type
+              },
               userId
             })
           });
