@@ -7,7 +7,13 @@ import { getBaseUrl } from '@/lib/utils/urls';
 export const createStrategyTool = (userId: string) => {
   return new DynamicStructuredTool({
     name: "create_strategy",
-    description: "Creates a trading strategy with specified parameters",
+    description: `Creates a trading strategy with specified parameters:
+      - amount: USDC amount (min 10)
+      - category: Token category (e.g., 'base-meme-coins' for meme tokens)
+      - tokenCount: Number of tokens to hold (1-10)
+      - rebalanceMinutes: Rebalance interval in minutes (recommended: 60, 120, 240, or 1440)
+      - type: Strategy type ('RANDOM', 'MARKET_CAP', or 'VOLUME')
+      - confirmed: Boolean to confirm creation`,
     schema: z.object({
       amount: z.number().min(10),
       category: z.string(),
@@ -21,10 +27,14 @@ export const createStrategyTool = (userId: string) => {
         throw new Error('User not authenticated');
       }
 
+      if (!confirmed) {
+        return "Please confirm the strategy creation by setting confirmed to true.";
+      }
+
       try {
         console.log('Creating strategy with parameters:', { amount, category, tokenCount, rebalanceMinutes, type });
 
-        // Create strategy object
+        // Create strategy object with shorter timeout
         const strategy: Strategy = {
           id: crypto.randomUUID(),
           userId,
@@ -41,34 +51,58 @@ export const createStrategyTool = (userId: string) => {
           last_updated: new Date().toISOString()
         };
 
-        // Store in database
+        // Store in database with timeout
+        const dbPromise = new Promise(async (resolve, reject) => {
+          const timeoutId = setTimeout(() => reject(new Error('Database operation timed out')), 5000);
+          try {
+            const db = DatabaseService.getInstance();
+            await db.storeStrategy(strategy);
+            clearTimeout(timeoutId);
+            resolve(true);
+          } catch (error) {
+            clearTimeout(timeoutId);
+            reject(error);
+          }
+        });
+
         try {
-          const db = DatabaseService.getInstance();
-          await db.storeStrategy(strategy);
+          await dbPromise;
           console.log('Strategy stored in database');
         } catch (dbError) {
           console.error('Database error:', dbError);
           throw new Error(`Database error: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
         }
 
-        // Call create endpoint
-        try {
-          const response = await fetch('/api/strategy/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              parameters: {
-                ...strategy.parameters,
-                type: strategy.type
-              },
-              userId
-            })
-          });
+        // Call create endpoint with timeout
+        const apiPromise = new Promise(async (resolve, reject) => {
+          const timeoutId = setTimeout(() => reject(new Error('API operation timed out')), 5000);
+          try {
+            const response = await fetch('/api/strategy/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                parameters: {
+                  ...strategy.parameters,
+                  type: strategy.type
+                },
+                userId
+              })
+            });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`API error: ${JSON.stringify(errorData)}`);
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(`API error: ${JSON.stringify(errorData)}`);
+            }
+            clearTimeout(timeoutId);
+            resolve(true);
+          } catch (error) {
+            clearTimeout(timeoutId);
+            reject(error);
           }
+        });
+
+        try {
+          await apiPromise;
           console.log('Strategy creation API call successful');
         } catch (apiError) {
           console.error('API call error:', apiError);
