@@ -65,8 +65,14 @@ export const createStrategyTool = (userId: string) => {
         await db.storeStrategy(strategy);
         console.log('Strategy stored in database');
 
-        // Use getBaseUrl instead of direct env vars
+        // Log URL resolution
         const baseUrl = getBaseUrl();
+        console.log('Strategy Creation:', {
+          baseUrl,
+          endpoint: `${baseUrl}/api/strategy/create`,
+          environment: process.env.NODE_ENV,
+          timestamp: new Date().toISOString()
+        });
 
         // Call create endpoint with absolute URL
         const response = await fetch(`${baseUrl}/api/strategy/create`, {
@@ -81,6 +87,13 @@ export const createStrategyTool = (userId: string) => {
             },
             userId
           })
+        });
+
+        // Log response status
+        console.log('Strategy Creation Response:', {
+          status: response.status,
+          ok: response.ok,
+          timestamp: new Date().toISOString()
         });
 
         if (!response.ok) {

@@ -1,18 +1,32 @@
 export function getBaseUrl() {
+  const environment = process.env.NODE_ENV;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const vercelUrl = process.env.VERCEL_URL;
+
+  console.log('URL Resolution:', {
+    environment,
+    appUrl,
+    vercelUrl,
+    isBrowser: typeof window !== 'undefined'
+  });
+
   if (typeof window !== 'undefined') {
-    // Browser should use relative path
+    console.log('Running in browser, using relative path');
     return '';
   }
 
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    console.log(`Using NEXT_PUBLIC_APP_URL: ${appUrl}`);
+    return appUrl;
   }
 
-  if (process.env.VERCEL_URL) {
-    // Fallback for vercel.com
-    return `https://${process.env.VERCEL_URL}`;
+  if (vercelUrl) {
+    const url = `https://${vercelUrl}`;
+    console.log(`Using VERCEL_URL: ${url}`);
+    return url;
   }
 
-  // Assume localhost
-  return `http://localhost:${process.env.PORT || 3000}`;
+  const localUrl = `http://localhost:${process.env.PORT || 3000}`;
+  console.log(`Falling back to localhost: ${localUrl}`);
+  return localUrl;
 }
