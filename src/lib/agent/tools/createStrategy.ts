@@ -53,8 +53,7 @@ export const createStrategyTool = (userId: string) => {
 
         // Call create endpoint
         try {
-          const baseUrl = getBaseUrl();
-          const response = await fetch(`${baseUrl}/api/strategy/create`, {
+          const response = await fetch('/api/strategy/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
