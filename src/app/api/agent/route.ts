@@ -10,14 +10,17 @@ export async function POST(request: Request) {
     }
     const { agent } = await initializeAgent(userId);
 
-    // Add user message to history
-    const humanMessage = new HumanMessage({
-      content: message,
-      additional_kwargs: {}
+    // Convert history to LangChain messages
+    const history = conversationHistory.map(msg => {
+      if (msg.type === 'HumanMessage') {
+        return new HumanMessage(msg.data.content);
+      }
+      return new AIMessage(msg.data.content);
     });
 
-    // Use provided conversation history plus new message
-    const messages = [...conversationHistory, humanMessage];
+    // Add current message
+    const humanMessage = new HumanMessage(message);
+    const messages = [...history, humanMessage];
 
     const stream = await agent.stream(
       { messages },
@@ -39,7 +42,6 @@ export async function POST(request: Request) {
       additional_kwargs: {}
     });
 
-    // Return both the response and the updated conversation history
     return NextResponse.json({
       response: chunks.join('\n'),
       messages: [...messages, aiMessage]
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Agent error:', error);
     return NextResponse.json(
-      { error: 'Failed to process request' },
+      { error: `Failed to process request: ${error}` },
       { status: 500 }
     );
   }
