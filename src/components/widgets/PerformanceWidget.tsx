@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Activity, Timer, Zap, Network } from 'lucide-react';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface PerformanceMetrics {
   totalValue: number;
@@ -31,6 +32,7 @@ const formatDate = (dateString: string) => {
 };
 
 export function PerformanceWidget() {
+  const { userId } = useAuth();
   const [metrics, setMetrics] = useState<PerformanceMetrics>({
     totalValue: 0,
     pnl: 0,
@@ -45,8 +47,10 @@ export function PerformanceWidget() {
   useEffect(() => {
     // Fetch wallet info for network
     async function fetchWalletInfo() {
+      if (!userId) return;
+
       try {
-        const response = await fetch('/api/wallet/address');
+        const response = await fetch(`/api/wallet/address?userId=${userId}`);
         if (response.ok) {
           const data: WalletInfo = await response.json();
           setNetworkInfo(data.network);

@@ -7,41 +7,48 @@ const conversationHistory: { messages: (HumanMessage | AIMessage)[] } = {
   messages: []
 };
 
-// Increase the default timeout for this route
-export const maxDuration = 300; // 5 minutes
-
 export async function POST(request: Request) {
   try {
     const { message, userId } = await request.json();
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+    const { agent } = await initializeAgent(userId);
 
-    if (!userId || !message) {
-      return NextResponse.json({
-        error: 'Missing required fields. Need userId and message.'
-      }, { status: 400 });
+    // Add user message to history
+    const humanMessage = new HumanMessage({
+      content: message,
+      additional_kwargs: {}
+    });
+    conversationHistory.messages.push(humanMessage);
+
+    const stream = await agent.stream(
+      { messages: conversationHistory.messages },
+      { configurable: { thread_id: "ASTRA-Agent" } }
+    );
+
+    const chunks: string[] = [];
+    for await (const chunk of stream) {
+      if ("agent" in chunk && chunk.agent?.messages?.[0]?.content) {
+        chunks.push(chunk.agent.messages[0].content);
+      } else if ("tools" in chunk && chunk.tools?.messages?.[0]?.content) {
+        chunks.push(chunk.tools.messages[0].content);
+      }
     }
 
-    // Add timeout to agent initialization
-    const agentPromise = initializeAgent(userId);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Agent initialization timed out')), 30000)
-    );
+    // Add AI response to history
+    const aiMessage = new AIMessage({
+      content: chunks.join('\n'),
+      additional_kwargs: {}
+    });
+    conversationHistory.messages.push(aiMessage);
 
-    const { agent } = await Promise.race([agentPromise, timeoutPromise]);
-
-    // Add timeout to agent chat
-    const chatPromise = agent.chat(message);
-    const chatTimeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Agent response timed out')), 60000)
-    );
-
-    const response = await Promise.race([chatPromise, chatTimeoutPromise]);
-
-    return NextResponse.json({ response });
+    return NextResponse.json({ response: chunks.join('\n') });
   } catch (error) {
     console.error('Agent error:', error);
     return NextResponse.json(
-      { error: 'Failed to process message', details: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message.includes('timed out') ? 504 : 500 }
+      { error: 'Failed to process request' },
+      { status: 500 }
     );
   }
 }
