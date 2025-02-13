@@ -1,8 +1,7 @@
 import { Strategy } from './types';
 import { getBaseUrl } from '@/lib/utils/urls';
-import { headers } from 'next/headers';
 
-export async function executeStrategy(strategy: Strategy) {
+export async function executeStrategy(strategy: Strategy, headers?: HeadersInit) {
   try {
     console.log('Executing strategy:', {
       id: strategy.id,
@@ -12,19 +11,10 @@ export async function executeStrategy(strategy: Strategy) {
 
     const baseUrl = getBaseUrl();
 
-    // Get original request headers
-    let requestHeaders = {};
-    try {
-      const headersList = await headers();
-      requestHeaders = {
-        'Content-Type': 'application/json',
-        'Authorization': headersList.get('authorization') || '',
-        'Cookie': headersList.get('cookie') || '',
-      };
-    } catch (error) {
-      console.warn('Could not get original request headers:', error);
-      requestHeaders = { 'Content-Type': 'application/json' };
-    }
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      ...headers
+    };
 
     const response = await fetch(`${baseUrl}/api/strategy/execute-trades`, {
       method: 'POST',
