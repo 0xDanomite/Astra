@@ -2,7 +2,8 @@ import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { DatabaseService } from '@/lib/services/database';
 import { Strategy } from '@/lib/strategies/types';
-import { getBaseUrl } from '@/lib/utils/urls';
+import { StrategyScheduler } from '@/lib/strategies/scheduler';
+import { executeStrategy } from '@/lib/strategies/executor';
 
 export const createStrategyTool = (userId: string) => {
   return new DynamicStructuredTool({
@@ -61,41 +62,23 @@ export const createStrategyTool = (userId: string) => {
         const db = DatabaseService.getInstance();
         await db.storeStrategy(strategy);
 
-        // Log URL resolution
-        const baseUrl = getBaseUrl();
-        console.log('Strategy Creation:', {
-          baseUrl,
-          endpoint: `${baseUrl}/api/strategy/create`,
-          environment: process.env.NODE_ENV,
-          timestamp: new Date().toISOString()
-        });
+        // Execute initial trades
+        console.log('Executing initial trades...');
+        const result = await executeStrategy(strategy);
 
-        // Call create endpoint with absolute URL
-        const response = await fetch(`${baseUrl}/api/strategy/create`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            parameters: {
-              ...strategy.parameters,
-              type: strategy.type
-            },
-            userId
-          })
-        });
+        if (!result.success) {
+          console.error('Initial trade execution failed:', result.error);
+        }
 
-        // Log response status
-        console.log('Strategy Creation Response:', {
-          status: response.status,
-          ok: response.ok,
-          timestamp: new Date().toISOString()
-        });
+        // Schedule the strategy
+        console.log('Scheduling strategy...');
+        const scheduler = StrategyScheduler.getInstance();
+        await scheduler.scheduleStrategy(strategy);
 
         return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC\nRebalance Interval: ${rebalanceMinutes} minutes`;
       } catch (error) {
         console.error('Strategy creation failed:', error);
-        return `Failed to create strategy: ${error instanceof Error ? error.message : String(error)}`;
+        throw error;
       }
     }
   });
