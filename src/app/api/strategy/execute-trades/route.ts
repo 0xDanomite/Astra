@@ -29,24 +29,28 @@ async function initializeWallet(userId: string) {
 
 export async function POST(request: Request) {
   try {
+    console.log('Starting trade execution...');
     const { strategy } = await request.json();
+
     if (!strategy.userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
+    console.log('Initializing wallet...');
     const wallet = await initializeWallet(strategy.userId);
     const db = DatabaseService.getInstance();
 
     const isInitialSetup = !strategy.current_holdings || strategy.current_holdings.length === 0;
+    console.log('Trade type:', isInitialSetup ? 'Initial Setup' : 'Rebalance');
 
     if (isInitialSetup) {
+      console.log('Fetching tokens for category:', strategy.parameters.category);
       const baseTokens = await coingeckoService.getTopTokensByCategory(
         strategy.parameters.category!,
         25
       );
 
-      console.log(`Found ${baseTokens.length} tokens for strategy execution`);
-
+      console.log(`Found ${baseTokens.length} tokens, selecting ${strategy.parameters.tokenCount}`);
       const selectedTokens = selectTokens(
         baseTokens,
         strategy.parameters.tokenCount,
@@ -54,16 +58,25 @@ export async function POST(request: Request) {
       );
 
       const perTokenAllocation = strategy.parameters.totalAllocation / strategy.parameters.tokenCount;
+      console.log('Per token allocation:', perTokenAllocation, 'USDC');
 
+      // Add timeout for trade execution
+      const tradeTimeout = 30000; // 30 seconds
       const trades = await Promise.all(selectedTokens.map(async (token) => {
         try {
-          console.log(`Initial allocation: ${perTokenAllocation} USDC -> ${token.symbol} (${token.address})`);
+          console.log(`Executing trade: ${perTokenAllocation} USDC -> ${token.symbol}`);
           const trade = await wallet.createTrade({
             amount: perTokenAllocation,
             fromAssetId: Coinbase.assets.Usdc,
             toAssetId: token.address,
           });
-          await trade.wait();
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Trade timeout')), tradeTimeout)
+          );
+
+          await Promise.race([trade.wait(), timeoutPromise]);
+          console.log(`Trade completed for ${token.symbol}`);
           return { token, status: 'SUCCESS' };
         } catch (error) {
           console.error(`Trade failed for ${token.symbol}:`, error);
@@ -72,9 +85,9 @@ export async function POST(request: Request) {
       }));
 
       const successfulTrades = trades.filter(t => t.status === 'SUCCESS').map(t => t.token);
-      strategy.current_holdings = successfulTrades;
+      console.log(`Completed trades: ${successfulTrades.length} successful, ${trades.length - successfulTrades.length} failed`);
 
-      // Update strategy in database
+      strategy.current_holdings = successfulTrades;
       await db.storeStrategy({
         ...strategy,
         last_updated: new Date().toISOString()
@@ -85,7 +98,6 @@ export async function POST(request: Request) {
         holdings: successfulTrades,
         message: 'Initial setup completed successfully'
       });
-
     } else {
       // Rebalancing logic
       const baseTokens = await coingeckoService.getTopTokensByCategory(
