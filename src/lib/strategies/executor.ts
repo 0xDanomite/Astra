@@ -3,6 +3,12 @@ import { getBaseUrl } from '@/lib/utils/urls';
 
 export async function executeStrategy(strategy: Strategy) {
   try {
+    console.log('Executing strategy:', {
+      id: strategy.id,
+      type: strategy.type,
+      parameters: strategy.parameters
+    });
+
     const baseUrl = getBaseUrl();
     const response = await fetch(`${baseUrl}/api/strategy/execute-trades`, {
       method: 'POST',
@@ -12,10 +18,13 @@ export async function executeStrategy(strategy: Strategy) {
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('Strategy execution failed:', error);
       throw new Error(error.details || 'Failed to execute strategy');
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('Strategy execution completed:', result);
+    return result;
   } catch (error) {
     console.error('Strategy execution error:', error);
     return {

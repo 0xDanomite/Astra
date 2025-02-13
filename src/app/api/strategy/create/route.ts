@@ -105,6 +105,15 @@ export async function POST(request: Request) {
       throw new Error(`Strategy storage failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    // Execute initial trades
+    try {
+      console.log('Executing initial trades...');
+      await executeStrategy(strategy);
+    } catch (error) {
+      console.error('Initial trade execution failed:', error);
+      // Don't throw here - strategy is created but trades failed
+    }
+
     // Schedule the strategy
     try {
       console.log('Scheduling strategy...');
