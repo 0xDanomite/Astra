@@ -126,7 +126,7 @@ export async function initializeAgent(userId: string) {
     PARAMETERS GUIDE:
     - amount: Minimum 10 USDC
     - tokenCount: 1-10 tokens
-    - rebalanceMinutes: Suggested 60, 120, 240, or 1440 (daily)
+    - rebalanceMinutes: Any interval (in minutes). Note: shorter intervals mean more frequent trades.
 
     EXAMPLE CONVERSATIONS:
     User: "I want to invest in meme coins"
