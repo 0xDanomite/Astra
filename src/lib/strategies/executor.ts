@@ -9,16 +9,30 @@ export async function executeStrategy(strategy: Strategy, headers?: HeadersInit)
       parameters: strategy.parameters
     });
 
+    // Check if we're in a browser environment
+    const isBrowser = typeof window !== 'undefined';
+
+    if (!isBrowser) {
+      // If server-side, use direct import to avoid API call
+      const { POST } = await import('@/app/api/strategy/execute-trades/route');
+      const response = await POST(new Request('http://localhost/api/strategy/execute-trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ strategy })
+      }));
+
+      const result = await response.json();
+      return result;
+    }
+
+    // Browser-side code remains the same
     const baseUrl = getBaseUrl();
-
-    const requestHeaders = {
-      'Content-Type': 'application/json',
-      ...headers
-    };
-
     const response = await fetch(`${baseUrl}/api/strategy/execute-trades`, {
       method: 'POST',
-      headers: requestHeaders,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
       body: JSON.stringify({ strategy }),
       credentials: 'include'
     });
