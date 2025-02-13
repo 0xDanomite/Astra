@@ -38,13 +38,17 @@ export const createStrategyTool = (userId: string) => {
       }
 
       try {
+        console.log('Creating strategy with parameters:', {
+          amount, category, tokenCount, rebalanceMinutes, type
+        });
+
         const strategy: Strategy = {
           id: crypto.randomUUID(),
           userId,
           type,
           parameters: {
             totalAllocation: amount,
-            category,
+            category: category || 'base-meme-coins',
             tokenCount,
             rebalanceTime: `${rebalanceMinutes}min`
           },
@@ -88,7 +92,7 @@ export const createStrategyTool = (userId: string) => {
           timestamp: new Date().toISOString()
         });
 
-        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC`;
+        return `Strategy created successfully!\nID: ${strategy.id}\nType: ${type}\nAllocation: ${amount} USDC\nRebalance Interval: ${rebalanceMinutes} minutes`;
       } catch (error) {
         console.error('Strategy creation failed:', error);
         return `Failed to create strategy: ${error instanceof Error ? error.message : String(error)}`;
